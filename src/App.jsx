@@ -174,6 +174,31 @@ const modelDataFromForm = (form) => ({
   is_active: Boolean(form.isActive),
 })
 
+const normalizePrefillPatch = (prefill) => {
+  const asString = (value) => {
+    if (Array.isArray(value)) return value.join(', ')
+    if (value === null || value === undefined) return ''
+    return String(value)
+  }
+  const patch = {}
+  const stringFields = [
+    'slug', 'gender', 'nameRu', 'nameEn', 'bioShortRu', 'bioShortEn', 'bioFullRu', 'bioFullEn',
+    'speakingStyleRu', 'speakingStyleEn', 'systemPromptCore', 'bodyTypeKey', 'bodyTypeRu', 'bodyTypeEn',
+    'ethnicityKey', 'ethnicityRu', 'ethnicityEn', 'languageKeys', 'languagesRu', 'languagesEn',
+    'relationshipStatusKey', 'relationshipStatusRu', 'relationshipStatusEn',
+    'occupationKey', 'occupationRu', 'occupationEn', 'hobbyKeys', 'hobbiesRu', 'hobbiesEn',
+    'personalityKeys', 'personalityRu', 'personalityEn', 'characterTraits', 'interests',
+    'tabooTopics', 'allowedTopics', 'boundaries', 'personaRules', 'mediaRules',
+  ]
+  for (const key of stringFields) {
+    if (key in prefill) patch[key] = asString(prefill[key])
+  }
+  if ('age' in prefill && !Number.isNaN(Number(prefill.age))) patch.age = Number(prefill.age)
+  if ('sortOrder' in prefill && !Number.isNaN(Number(prefill.sortOrder))) patch.sortOrder = Number(prefill.sortOrder)
+  if ('isActive' in prefill) patch.isActive = Boolean(prefill.isActive)
+  return patch
+}
+
 function App() {
   const [adminLogin, setAdminLogin] = useState(localStorage.getItem('admin_login') || '')
   const [loginDraft, setLoginDraft] = useState(localStorage.getItem('admin_login') || '')
@@ -182,6 +207,8 @@ function App() {
   const [step, setStep] = useState('form')
   const [status, setStatus] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [prefillBrief, setPrefillBrief] = useState('')
+  const [prefillImageUrl, setPrefillImageUrl] = useState('')
 
   const previewModel = useMemo(() => modelDataFromForm(form), [form])
 
@@ -344,6 +371,46 @@ function App() {
     }
   }
 
+  const uploadPrefillPhoto = async (file) => {
+    if (!file) return
+    setStatus('Загрузка фото для предгенерации...')
+    const url = await uploadMedia(file, 'story_image')
+    if (!url) return
+    setPrefillImageUrl(url)
+    setStatus('Фото для предгенерации загружено')
+  }
+
+  const runPrefill = async () => {
+    if (!prefillBrief.trim() && !prefillImageUrl) {
+      setStatus('Добавь текст или фото для предгенерации')
+      return
+    }
+    setStatus('LLM заполняет черновик...')
+    setIsLoading(true)
+    try {
+      const response = await adminFetch('/admin/prefill-model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brief_text: prefillBrief.trim(),
+          image_url: prefillImageUrl || null,
+        }),
+      })
+      const data = await response.json()
+      const patch = normalizePrefillPatch(data.prefill || {})
+      setForm((prev) => ({
+        ...prev,
+        ...patch,
+        avatarUrl: prev.avatarUrl || prefillImageUrl || prev.avatarUrl,
+      }))
+      setStatus('Черновик полей заполнен. Проверь и поправь перед созданием.')
+    } catch (error) {
+      setStatus(`Ошибка предгенерации: ${error.message}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const createModel = async () => {
     setStatus('Создание модели...')
     setIsLoading(true)
@@ -399,7 +466,30 @@ function App() {
       </header>
 
       {step === 'form' && (
-        <section className="grid">
+        <>
+          <section className="card prefillCard">
+            <h2>Предгенерация черновика через LLM</h2>
+            <label>Коротко опиши модель (на русском)</label>
+            <textarea
+              value={prefillBrief}
+              onChange={(e) => setPrefillBrief(e.target.value)}
+              placeholder="Пример: Рыжая, теплая, романтичная девушка 24 года. Любит флирт, музыку, путешествия..."
+            />
+            <small className="fieldHint">Можно дать 2-5 предложений. LLM попытается заполнить все основные поля формы.</small>
+
+            <label>Одна референс-фотография (опционально)</label>
+            <input type="file" accept="image/*" onChange={(e) => uploadPrefillPhoto(e.target.files?.[0])} />
+            {prefillImageUrl && (
+              <a href={prefillImageUrl} target="_blank" rel="noreferrer">
+                Открыть загруженное фото
+              </a>
+            )}
+            <button disabled={isLoading} onClick={runPrefill}>
+              Сгенерировать черновик полей
+            </button>
+          </section>
+
+          <section className="grid">
           <article className="card">
             <h2>База</h2>
             <label>Slug модели (уникальный ID) *</label>
@@ -610,7 +700,8 @@ function App() {
               </div>
             ))}
           </article>
-        </section>
+          </section>
+        </>
       )}
 
       {step === 'preview' && (

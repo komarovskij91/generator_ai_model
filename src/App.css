@@ -30,6 +30,10 @@
   gap: 12px;
 }
 
+.prefillCard {
+  margin-bottom: 12px;
+}
+
 .previewGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
