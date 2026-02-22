@@ -71,6 +71,22 @@ const splitList = (value) =>
     .map((item) => item.trim())
     .filter(Boolean)
 
+const CYR_TO_LAT = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh',
+  з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o',
+  п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'ts',
+  ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+}
+
+const toStableKey = (value) =>
+  (value || '')
+    .toLowerCase()
+    .split('')
+    .map((ch) => CYR_TO_LAT[ch] ?? ch)
+    .join('')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'unknown'
+
 const ruSourcePayloadFromForm = (form) => ({
   name_ru: form.nameRu,
   bio_short_ru: form.bioShortRu,
@@ -93,6 +109,8 @@ const ruSourcePayloadFromForm = (form) => ({
 })
 
 const modelDataFromForm = (form) => ({
+  // keep localized interests text, but build filter keys as stable snake_case
+  // so downstream search/filter stays consistent.
   slug: form.slug.trim(),
   name_i18n: { ru: form.nameRu, en: form.nameEn },
   gender: form.gender,
@@ -142,7 +160,7 @@ const modelDataFromForm = (form) => ({
     body_type_keys: splitList(form.bodyTypeKey),
     ethnicity_keys: splitList(form.ethnicityKey),
     languages_keys: splitList(form.languageKeys),
-    interest_keys: splitList(form.interests),
+    interest_keys: splitList(form.interests).map(toStableKey),
     personality_keys: splitList(form.personalityKeys),
     relationship_status_keys: splitList(form.relationshipStatusKey),
     occupation_keys: splitList(form.occupationKey),
