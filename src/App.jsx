@@ -180,22 +180,97 @@ const normalizePrefillPatch = (prefill) => {
     if (value === null || value === undefined) return ''
     return String(value)
   }
-  const patch = {}
-  const stringFields = [
-    'slug', 'gender', 'nameRu', 'nameEn', 'bioShortRu', 'bioShortEn', 'bioFullRu', 'bioFullEn',
-    'speakingStyleRu', 'speakingStyleEn', 'systemPromptCore', 'bodyTypeKey', 'bodyTypeRu', 'bodyTypeEn',
-    'ethnicityKey', 'ethnicityRu', 'ethnicityEn', 'languageKeys', 'languagesRu', 'languagesEn',
-    'relationshipStatusKey', 'relationshipStatusRu', 'relationshipStatusEn',
-    'occupationKey', 'occupationRu', 'occupationEn', 'hobbyKeys', 'hobbiesRu', 'hobbiesEn',
-    'personalityKeys', 'personalityRu', 'personalityEn', 'characterTraits', 'interests',
-    'tabooTopics', 'allowedTopics', 'boundaries', 'personaRules', 'mediaRules',
-  ]
-  for (const key of stringFields) {
-    if (key in prefill) patch[key] = asString(prefill[key])
+  const fromAliases = (aliases) => {
+    for (const key of aliases) {
+      if (key in prefill && prefill[key] !== null && prefill[key] !== undefined && String(prefill[key]).trim() !== '') {
+        return prefill[key]
+      }
+    }
+    return undefined
   }
-  if ('age' in prefill && !Number.isNaN(Number(prefill.age))) patch.age = Number(prefill.age)
-  if ('sortOrder' in prefill && !Number.isNaN(Number(prefill.sortOrder))) patch.sortOrder = Number(prefill.sortOrder)
-  if ('isActive' in prefill) patch.isActive = Boolean(prefill.isActive)
+  const parseBool = (value) => {
+    if (typeof value === 'boolean') return value
+    const normalized = String(value || '').trim().toLowerCase()
+    return ['1', 'true', 'yes', 'on'].includes(normalized)
+  }
+  const toKeyList = (value) => splitList(asString(value)).map(toStableKey).join(', ')
+
+  const patch = {}
+  const aliases = {
+    slug: ['slug', 'model_slug'],
+    gender: ['gender', 'sex'],
+    nameRu: ['nameRu', 'name_ru', 'name_ru_i18n', 'name'],
+    nameEn: ['nameEn', 'name_en'],
+    bioShortRu: ['bioShortRu', 'bio_short_ru'],
+    bioShortEn: ['bioShortEn', 'bio_short_en'],
+    bioFullRu: ['bioFullRu', 'bio_full_ru'],
+    bioFullEn: ['bioFullEn', 'bio_full_en'],
+    speakingStyleRu: ['speakingStyleRu', 'speaking_style_ru'],
+    speakingStyleEn: ['speakingStyleEn', 'speaking_style_en'],
+    systemPromptCore: ['systemPromptCore', 'system_prompt_core', 'prompt'],
+    bodyTypeKey: ['bodyTypeKey', 'body_type_key'],
+    bodyTypeRu: ['bodyTypeRu', 'body_type_ru'],
+    bodyTypeEn: ['bodyTypeEn', 'body_type_en'],
+    ethnicityKey: ['ethnicityKey', 'ethnicity_key'],
+    ethnicityRu: ['ethnicityRu', 'ethnicity_ru'],
+    ethnicityEn: ['ethnicityEn', 'ethnicity_en'],
+    languageKeys: ['languageKeys', 'language_keys'],
+    languagesRu: ['languagesRu', 'languages_ru'],
+    languagesEn: ['languagesEn', 'languages_en'],
+    relationshipStatusKey: ['relationshipStatusKey', 'relationship_status_key'],
+    relationshipStatusRu: ['relationshipStatusRu', 'relationship_status_ru'],
+    relationshipStatusEn: ['relationshipStatusEn', 'relationship_status_en'],
+    occupationKey: ['occupationKey', 'occupation_key'],
+    occupationRu: ['occupationRu', 'occupation_ru'],
+    occupationEn: ['occupationEn', 'occupation_en'],
+    hobbyKeys: ['hobbyKeys', 'hobby_keys'],
+    hobbiesRu: ['hobbiesRu', 'hobbies_ru'],
+    hobbiesEn: ['hobbiesEn', 'hobbies_en'],
+    personalityKeys: ['personalityKeys', 'personality_keys'],
+    personalityRu: ['personalityRu', 'personality_ru'],
+    personalityEn: ['personalityEn', 'personality_en'],
+    characterTraits: ['characterTraits', 'character_traits'],
+    interests: ['interests', 'interests_ru'],
+    tabooTopics: ['tabooTopics', 'taboo_topics'],
+    allowedTopics: ['allowedTopics', 'allowed_topics'],
+    boundaries: ['boundaries'],
+    personaRules: ['personaRules', 'persona_rules'],
+    mediaRules: ['mediaRules', 'media_rules'],
+  }
+  for (const [field, fieldAliases] of Object.entries(aliases)) {
+    const value = fromAliases(fieldAliases)
+    if (value !== undefined) {
+      patch[field] = asString(value)
+    }
+  }
+
+  const ageRaw = fromAliases(['age'])
+  const sortRaw = fromAliases(['sortOrder', 'sort_order'])
+  const activeRaw = fromAliases(['isActive', 'is_active'])
+  if (ageRaw !== undefined && !Number.isNaN(Number(ageRaw))) patch.age = Number(ageRaw)
+  if (sortRaw !== undefined && !Number.isNaN(Number(sortRaw))) patch.sortOrder = Number(sortRaw)
+  if (activeRaw !== undefined) patch.isActive = parseBool(activeRaw)
+
+  if (!patch.slug) patch.slug = toStableKey(patch.nameEn || patch.nameRu || 'model')
+  if (!patch.bodyTypeKey && patch.bodyTypeRu) patch.bodyTypeKey = toStableKey(patch.bodyTypeRu)
+  if (!patch.ethnicityKey && patch.ethnicityRu) patch.ethnicityKey = toStableKey(patch.ethnicityRu)
+  if (!patch.relationshipStatusKey && patch.relationshipStatusRu) patch.relationshipStatusKey = toStableKey(patch.relationshipStatusRu)
+  if (!patch.occupationKey && patch.occupationRu) patch.occupationKey = toStableKey(patch.occupationRu)
+  if (!patch.hobbyKeys && patch.hobbiesRu) patch.hobbyKeys = toKeyList(patch.hobbiesRu)
+  if (!patch.personalityKeys && patch.personalityRu) patch.personalityKeys = toKeyList(patch.personalityRu)
+  if (!patch.languageKeys && patch.languagesRu) {
+    const mapped = splitList(patch.languagesRu).map((item) => {
+      const key = toStableKey(item)
+      if (key.includes('russ') || key.includes('rus') || key.includes('russian')) return 'ru'
+      if (key.includes('angl') || key.includes('english')) return 'en'
+      return key
+    })
+    patch.languageKeys = mapped.join(', ')
+  }
+  if (!patch.systemPromptCore && (patch.bioShortRu || patch.bioFullRu)) {
+    patch.systemPromptCore =
+      'Общайся естественно и дружелюбно, поддерживай характер модели, соблюдай границы безопасности.'
+  }
   return patch
 }
 
