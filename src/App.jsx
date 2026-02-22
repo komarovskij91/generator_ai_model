@@ -208,8 +208,7 @@ function App() {
   }
 
   const uploadMedia = async (file, mediaKind) => {
-    if (!file) return
-    setStatus(`Загрузка ${mediaKind}...`)
+    if (!file) return null
     setIsLoading(true)
     try {
       const formData = new FormData()
@@ -221,28 +220,49 @@ function App() {
         body: formData,
       })
       const data = await response.json()
-
-      if (mediaKind === 'avatar') {
-        if (form.avatarUrl && form.avatarUrl !== data.url) {
-          await deleteMedia(form.avatarUrl)
-        }
-        setField('avatarUrl', data.url)
-      } else if (mediaKind === 'cover') {
-        if (form.coverUrl && form.coverUrl !== data.url) {
-          await deleteMedia(form.coverUrl)
-        }
-        setField('coverUrl', data.url)
-      } else if (mediaKind === 'story_image') {
-        setField('storyImageUrls', [...form.storyImageUrls, data.url])
-      } else if (mediaKind === 'story_video') {
-        setField('storyVideoUrls', [...form.storyVideoUrls, data.url])
-      }
-      setStatus('Загрузка завершена')
+      return data.url
     } catch (error) {
       setStatus(`Ошибка загрузки: ${error.message}`)
+      return null
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const uploadManyMedia = async (files, mediaKind) => {
+    if (!files?.length) return
+    setStatus(`Загрузка ${files.length} файлов...`)
+    const uploadedUrls = []
+    for (const file of files) {
+      const url = await uploadMedia(file, mediaKind)
+      if (url) uploadedUrls.push(url)
+    }
+    if (!uploadedUrls.length) return
+    if (mediaKind === 'story_image') {
+      setField('storyImageUrls', [...form.storyImageUrls, ...uploadedUrls])
+    } else if (mediaKind === 'story_video') {
+      setField('storyVideoUrls', [...form.storyVideoUrls, ...uploadedUrls])
+    }
+    setStatus(`Загружено: ${uploadedUrls.length}`)
+  }
+
+  const uploadSingleMedia = async (file, mediaKind) => {
+    if (!file) return
+    setStatus(`Загрузка ${mediaKind}...`)
+    const url = await uploadMedia(file, mediaKind)
+    if (!url) return
+    if (mediaKind === 'avatar') {
+      if (form.avatarUrl && form.avatarUrl !== url) {
+        await deleteMedia(form.avatarUrl)
+      }
+      setField('avatarUrl', url)
+    } else if (mediaKind === 'cover') {
+      if (form.coverUrl && form.coverUrl !== url) {
+        await deleteMedia(form.coverUrl)
+      }
+      setField('coverUrl', url)
+    }
+    setStatus('Загрузка завершена')
   }
 
   const deleteMedia = async (url) => {
@@ -525,7 +545,7 @@ function App() {
           <article className="card">
             <h2>Media (R2)</h2>
             <label>Avatar (auto compress)</label>
-            <input type="file" accept="image/*" onChange={(e) => uploadMedia(e.target.files?.[0], 'avatar')} />
+            <input type="file" accept="image/*" onChange={(e) => uploadSingleMedia(e.target.files?.[0], 'avatar')} />
             {form.avatarUrl && (
               <a href={form.avatarUrl} target="_blank" rel="noreferrer">
                 avatar url
@@ -533,7 +553,7 @@ function App() {
             )}
 
             <label>Cover (auto compress)</label>
-            <input type="file" accept="image/*" onChange={(e) => uploadMedia(e.target.files?.[0], 'cover')} />
+            <input type="file" accept="image/*" onChange={(e) => uploadSingleMedia(e.target.files?.[0], 'cover')} />
             {form.coverUrl && (
               <a href={form.coverUrl} target="_blank" rel="noreferrer">
                 cover url
@@ -541,7 +561,12 @@ function App() {
             )}
 
             <label>Story images</label>
-            <input type="file" accept="image/*" onChange={(e) => uploadMedia(e.target.files?.[0], 'story_image')} />
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => uploadManyMedia(Array.from(e.target.files || []), 'story_image')}
+            />
             {form.storyImageUrls.map((url) => (
               <div key={url} className="miniRow">
                 <a href={url} target="_blank" rel="noreferrer">
@@ -552,7 +577,12 @@ function App() {
             ))}
 
             <label>Story videos ({'<='}30MB)</label>
-            <input type="file" accept="video/*" onChange={(e) => uploadMedia(e.target.files?.[0], 'story_video')} />
+            <input
+              type="file"
+              accept="video/*"
+              multiple
+              onChange={(e) => uploadManyMedia(Array.from(e.target.files || []), 'story_video')}
+            />
             {form.storyVideoUrls.map((url) => (
               <div key={url} className="miniRow">
                 <a href={url} target="_blank" rel="noreferrer">
