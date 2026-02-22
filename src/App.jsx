@@ -175,14 +175,26 @@ const modelDataFromForm = (form) => ({
 })
 
 const normalizePrefillPatch = (prefill) => {
+  const UNKNOWN_MARKERS = new Set(['', 'unknown', 'неизвестно', 'n/a', 'none', 'null', '-'])
+  const cleanUnknown = (value) => {
+    const text = String(value ?? '').trim()
+    if (UNKNOWN_MARKERS.has(text.toLowerCase())) return ''
+    if (text.startsWith('##')) return text.replace(/^#+\s*/, '')
+    return text
+  }
   const asString = (value) => {
     if (Array.isArray(value)) return value.join(', ')
     if (value === null || value === undefined) return ''
-    return String(value)
+    return cleanUnknown(value)
   }
   const fromAliases = (aliases) => {
     for (const key of aliases) {
-      if (key in prefill && prefill[key] !== null && prefill[key] !== undefined && String(prefill[key]).trim() !== '') {
+      if (
+        key in prefill &&
+        prefill[key] !== null &&
+        prefill[key] !== undefined &&
+        cleanUnknown(prefill[key]) !== ''
+      ) {
         return prefill[key]
       }
     }
