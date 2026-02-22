@@ -55,6 +55,19 @@ label {
   color: #50535c;
 }
 
+.fieldHint {
+  margin-top: -4px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.fieldExample {
+  margin-top: -4px;
+  color: #9ca3af;
+  font-size: 11px;
+  font-style: italic;
+}
+
 input,
 textarea,
 select,

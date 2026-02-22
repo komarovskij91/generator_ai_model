@@ -364,47 +364,61 @@ function App() {
         <section className="grid">
           <article className="card">
             <h2>База</h2>
-            <label>slug *</label>
+            <label>Slug модели (уникальный ID) *</label>
             <input value={form.slug} onChange={(e) => setField('slug', e.target.value)} placeholder="nola_romantic" />
-            <label>gender *</label>
+            <small className="fieldHint">Используй английский и snake_case. Пример: nola_romantic.</small>
+            <label>Пол модели *</label>
             <select value={form.gender} onChange={(e) => setField('gender', e.target.value)}>
               <option value="female">female</option>
               <option value="male">male</option>
             </select>
-            <label>age *</label>
+            <small className="fieldExample">Пример: female</small>
+            <label>Возраст *</label>
             <input type="number" value={form.age} onChange={(e) => setField('age', e.target.value)} />
-            <label>sort_order</label>
+            <small className="fieldExample">Пример: 24</small>
+            <label>Порядок показа (sort_order)</label>
             <input type="number" value={form.sortOrder} onChange={(e) => setField('sortOrder', e.target.value)} />
-            <label>system_prompt_core *</label>
+            <small className="fieldExample">Меньше число = выше в списке. Пример: 10</small>
+            <label>Главная инструкция модели (system_prompt_core) *</label>
             <textarea value={form.systemPromptCore} onChange={(e) => setField('systemPromptCore', e.target.value)} />
+            <small className="fieldHint">Кратко опиши характер, стиль общения и ограничения.</small>
+            <small className="fieldExample">Пример: Ты романтичная и заботливая девушка, отвечаешь тепло и естественно.</small>
             <label>
               <input
                 type="checkbox"
                 checked={form.isActive}
                 onChange={(e) => setField('isActive', e.target.checked)}
               />
-              is_active
+              Модель активна (is_active)
             </label>
           </article>
 
           <article className="card">
             <h2>RU/EN тексты</h2>
-            <label>name_ru *</label>
+            <label>Имя модели на русском (name_ru) *</label>
             <input value={form.nameRu} onChange={(e) => setField('nameRu', e.target.value)} />
-            <label>name_en</label>
+            <small className="fieldExample">Пример: Нола</small>
+            <label>Имя модели на английском (name_en)</label>
             <input value={form.nameEn} onChange={(e) => setField('nameEn', e.target.value)} />
-            <label>bio_short_ru</label>
+            <small className="fieldExample">Пример: Nola</small>
+            <label>Короткое описание RU (bio_short_ru)</label>
             <textarea value={form.bioShortRu} onChange={(e) => setField('bioShortRu', e.target.value)} />
-            <label>bio_short_en</label>
+            <small className="fieldExample">Пример: Легкая в общении, любит флирт и уютные разговоры.</small>
+            <label>Короткое описание EN (bio_short_en)</label>
             <textarea value={form.bioShortEn} onChange={(e) => setField('bioShortEn', e.target.value)} />
-            <label>bio_full_ru</label>
+            <small className="fieldExample">Пример: Easy to talk to, loves flirty and cozy conversations.</small>
+            <label>Полное описание RU (bio_full_ru)</label>
             <textarea value={form.bioFullRu} onChange={(e) => setField('bioFullRu', e.target.value)} />
-            <label>bio_full_en</label>
+            <small className="fieldExample">Пример: Любит музыку, путешествия, умеет поддержать и вовлечь в диалог.</small>
+            <label>Полное описание EN (bio_full_en)</label>
             <textarea value={form.bioFullEn} onChange={(e) => setField('bioFullEn', e.target.value)} />
-            <label>speaking_style_ru</label>
+            <small className="fieldExample">Пример: She loves music, travel, and keeps conversations warm and engaging.</small>
+            <label>Стиль общения RU (speaking_style_ru)</label>
             <textarea value={form.speakingStyleRu} onChange={(e) => setField('speakingStyleRu', e.target.value)} />
-            <label>speaking_style_en</label>
+            <small className="fieldExample">Пример: короткие теплые сообщения, немного эмодзи.</small>
+            <label>Стиль общения EN (speaking_style_en)</label>
             <textarea value={form.speakingStyleEn} onChange={(e) => setField('speakingStyleEn', e.target.value)} />
+            <small className="fieldExample">Пример: short warm replies, natural tone, light emojis.</small>
             <button disabled={isLoading} onClick={generateEnglish}>
               Сгенерировать EN из RU
             </button>
@@ -412,72 +426,100 @@ function App() {
 
           <article className="card">
             <h2>Параметры (ключи + RU/EN)</h2>
-            <label>body_type_key *</label>
+            <label>Ключ телосложения (body_type_key) *</label>
             <input value={form.bodyTypeKey} onChange={(e) => setField('bodyTypeKey', e.target.value)} />
-            <label>body_type_ru</label>
+            <small className="fieldExample">Пример ключа: slim</small>
+            <label>Телосложение RU (body_type_ru)</label>
             <input value={form.bodyTypeRu} onChange={(e) => setField('bodyTypeRu', e.target.value)} />
-            <label>body_type_en</label>
+            <small className="fieldExample">Пример: стройная</small>
+            <label>Телосложение EN (body_type_en)</label>
             <input value={form.bodyTypeEn} onChange={(e) => setField('bodyTypeEn', e.target.value)} />
+            <small className="fieldExample">Пример: slim</small>
 
-            <label>ethnicity_key *</label>
+            <label>Ключ этничности (ethnicity_key) *</label>
             <input value={form.ethnicityKey} onChange={(e) => setField('ethnicityKey', e.target.value)} />
-            <label>ethnicity_ru</label>
+            <small className="fieldExample">Пример ключа: slavic</small>
+            <label>Этничность RU (ethnicity_ru)</label>
             <input value={form.ethnicityRu} onChange={(e) => setField('ethnicityRu', e.target.value)} />
-            <label>ethnicity_en</label>
+            <small className="fieldExample">Пример: славянка</small>
+            <label>Этничность EN (ethnicity_en)</label>
             <input value={form.ethnicityEn} onChange={(e) => setField('ethnicityEn', e.target.value)} />
+            <small className="fieldExample">Пример: Slavic</small>
 
-            <label>language_keys (comma)</label>
+            <label>Ключи языков (language_keys, через запятую)</label>
             <input value={form.languageKeys} onChange={(e) => setField('languageKeys', e.target.value)} />
-            <label>languages_ru (comma)</label>
+            <small className="fieldExample">Пример: ru,en</small>
+            <label>Языки RU (languages_ru, через запятую)</label>
             <input value={form.languagesRu} onChange={(e) => setField('languagesRu', e.target.value)} />
-            <label>languages_en (comma)</label>
+            <small className="fieldExample">Пример: Русский, Английский</small>
+            <label>Языки EN (languages_en, через запятую)</label>
             <input value={form.languagesEn} onChange={(e) => setField('languagesEn', e.target.value)} />
+            <small className="fieldExample">Пример: Russian, English</small>
 
-            <label>relationship_status_key</label>
+            <label>Ключ статуса отношений (relationship_status_key)</label>
             <input value={form.relationshipStatusKey} onChange={(e) => setField('relationshipStatusKey', e.target.value)} />
-            <label>relationship_status_ru</label>
+            <small className="fieldExample">Пример ключа: single</small>
+            <label>Статус отношений RU (relationship_status_ru)</label>
             <input value={form.relationshipStatusRu} onChange={(e) => setField('relationshipStatusRu', e.target.value)} />
-            <label>relationship_status_en</label>
+            <small className="fieldExample">Пример: свободна</small>
+            <label>Статус отношений EN (relationship_status_en)</label>
             <input value={form.relationshipStatusEn} onChange={(e) => setField('relationshipStatusEn', e.target.value)} />
+            <small className="fieldExample">Пример: single</small>
 
-            <label>occupation_key</label>
+            <label>Ключ профессии (occupation_key)</label>
             <input value={form.occupationKey} onChange={(e) => setField('occupationKey', e.target.value)} />
-            <label>occupation_ru</label>
+            <small className="fieldExample">Пример ключа: designer</small>
+            <label>Профессия RU (occupation_ru)</label>
             <input value={form.occupationRu} onChange={(e) => setField('occupationRu', e.target.value)} />
-            <label>occupation_en</label>
+            <small className="fieldExample">Пример: графический дизайнер</small>
+            <label>Профессия EN (occupation_en)</label>
             <input value={form.occupationEn} onChange={(e) => setField('occupationEn', e.target.value)} />
+            <small className="fieldExample">Пример: graphic designer</small>
 
-            <label>hobby_keys (comma)</label>
+            <label>Ключи хобби (hobby_keys, через запятую)</label>
             <input value={form.hobbyKeys} onChange={(e) => setField('hobbyKeys', e.target.value)} />
-            <label>hobbies_ru (comma)</label>
+            <small className="fieldExample">Пример: music,travel,fitness</small>
+            <label>Хобби RU (hobbies_ru, через запятую)</label>
             <input value={form.hobbiesRu} onChange={(e) => setField('hobbiesRu', e.target.value)} />
-            <label>hobbies_en (comma)</label>
+            <small className="fieldExample">Пример: музыка, путешествия, фитнес</small>
+            <label>Хобби EN (hobbies_en, через запятую)</label>
             <input value={form.hobbiesEn} onChange={(e) => setField('hobbiesEn', e.target.value)} />
+            <small className="fieldExample">Пример: music, travel, fitness</small>
 
-            <label>personality_keys (comma)</label>
+            <label>Ключи характера (personality_keys, через запятую)</label>
             <input value={form.personalityKeys} onChange={(e) => setField('personalityKeys', e.target.value)} />
-            <label>personality_ru (comma)</label>
+            <small className="fieldExample">Пример: caring,playful,confident</small>
+            <label>Черты характера RU (personality_ru, через запятую)</label>
             <input value={form.personalityRu} onChange={(e) => setField('personalityRu', e.target.value)} />
-            <label>personality_en (comma)</label>
+            <small className="fieldExample">Пример: заботливая, игривая, уверенная</small>
+            <label>Черты характера EN (personality_en, через запятую)</label>
             <input value={form.personalityEn} onChange={(e) => setField('personalityEn', e.target.value)} />
+            <small className="fieldExample">Пример: caring, playful, confident</small>
           </article>
 
           <article className="card">
-            <h2>Списки (comma)</h2>
-            <label>character_traits</label>
+            <h2>Доп. списки (через запятую)</h2>
+            <label>Характер/архетип (character_traits)</label>
             <input value={form.characterTraits} onChange={(e) => setField('characterTraits', e.target.value)} />
-            <label>interests</label>
+            <small className="fieldExample">Пример: романтичная, эмпатичная, эмоциональная</small>
+            <label>Интересы (interests)</label>
             <input value={form.interests} onChange={(e) => setField('interests', e.target.value)} />
-            <label>taboo_topics</label>
+            <small className="fieldExample">Пример: музыка, кино, психология</small>
+            <label>Табу темы (taboo_topics)</label>
             <input value={form.tabooTopics} onChange={(e) => setField('tabooTopics', e.target.value)} />
-            <label>allowed_topics</label>
+            <small className="fieldExample">Пример: насилие, политика</small>
+            <label>Разрешенные темы (allowed_topics)</label>
             <input value={form.allowedTopics} onChange={(e) => setField('allowedTopics', e.target.value)} />
-            <label>boundaries</label>
+            <small className="fieldExample">Пример: отношения, хобби, лайфстайл</small>
+            <label>Границы/правила (boundaries)</label>
             <input value={form.boundaries} onChange={(e) => setField('boundaries', e.target.value)} />
-            <label>persona_rules</label>
+            <small className="fieldExample">Пример: без оскорблений, без незаконных инструкций</small>
+            <label>Правила персонажа (persona_rules)</label>
             <input value={form.personaRules} onChange={(e) => setField('personaRules', e.target.value)} />
-            <label>media_rules</label>
+            <small className="fieldExample">Пример: отвечай мягко, поддерживай флирт, избегай токсичности</small>
+            <label>Правила медиа (media_rules)</label>
             <input value={form.mediaRules} onChange={(e) => setField('mediaRules', e.target.value)} />
+            <small className="fieldExample">Пример: фото можно по запросу, видео редко и только по контексту</small>
           </article>
 
           <article className="card">
