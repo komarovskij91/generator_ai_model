@@ -378,6 +378,8 @@ function App() {
             <h2>Предгенерация через LLM</h2>
             <label>Короткое описание (RU)</label>
             <textarea value={prefillBrief} onChange={(e) => setPrefillBrief(e.target.value)} />
+            <small className="fieldHint">Что это: свободный текст для первичного автозаполнения.</small>
+            <small className="fieldExample">Пример: Брюнетка 25 лет, уверенная, любит музыку и путешествия.</small>
             <label>1 фото-референс (опционально)</label>
             <input type="file" accept="image/*" onChange={(e) => uploadPrefillPhoto(e.target.files?.[0])} />
             {prefillImageUrl && <a href={prefillImageUrl} target="_blank" rel="noreferrer">Открыть фото</a>}
@@ -387,32 +389,40 @@ function App() {
           <section className="grid">
             <article className="card">
               <h2>База (обязательно)</h2>
-              <label>Имя RU *</label>
+              <label>Имя RU (`name_i18n.ru`) *</label>
               <input value={form.nameRu} onChange={(e) => setField('nameRu', e.target.value)} />
-              <label>Имя EN</label>
+              <small className="fieldExample">Пример: Айви</small>
+              <label>Имя EN (`name_i18n.en`)</label>
               <input value={form.nameEn} onChange={(e) => setField('nameEn', e.target.value)} />
-              <label>Slug *</label>
+              <small className="fieldExample">Пример: Ivy</small>
+              <label>Slug (`slug`) *</label>
               <input value={form.slug} onChange={(e) => setField('slug', e.target.value)} />
-              <label>Пол *</label>
+              <small className="fieldHint">Уникальный тех-ID модели в snake_case.</small>
+              <small className="fieldExample">Пример: ivy_romantic</small>
+              <label>Пол (`gender`) *</label>
               <select value={form.gender} onChange={(e) => setField('gender', e.target.value)}>
                 <option value="female">female</option>
                 <option value="male">male</option>
               </select>
-              <label>Возраст *</label>
+              <small className="fieldExample">Пример: female</small>
+              <label>Возраст (`age`) *</label>
               <input type="number" value={form.age} onChange={(e) => setField('age', e.target.value)} />
-              <label>Возрастная группа *</label>
+              <small className="fieldExample">Пример: 24</small>
+              <label>Возрастная группа (`target_age_group`) *</label>
               <select value={form.targetAgeGroup} onChange={(e) => setField('targetAgeGroup', e.target.value)}>
                 <option value="younger">younger (18-24)</option>
                 <option value="older">older (25-35+)</option>
               </select>
-              <label>system_prompt_core *</label>
+              <small className="fieldHint">Для фильтра “моложе/постарше”.</small>
+              <label>Главная инструкция (`system_prompt_core`) *</label>
               <textarea value={form.systemPromptCore} onChange={(e) => setField('systemPromptCore', e.target.value)} />
+              <small className="fieldExample">Пример: Отвечай тепло, уверенно, с легким флиртом и соблюдай границы.</small>
               <button disabled={isLoading} onClick={generateEnglish}>Сгенерировать EN из RU</button>
             </article>
 
             <article className="card">
               <h2>Фильтры (обязательно)</h2>
-              <label>Типажи (1-3)</label>
+              <label>Типажи (`archetype_keys`, 1-3)</label>
               <div className="chips">
                 {ARCHETYPES.map((item) => (
                   <label key={item.key} className="chip">
@@ -425,11 +435,13 @@ function App() {
                   </label>
                 ))}
               </div>
-              <label>Этничность</label>
+              <small className="fieldHint">Что это: характерный вайб модели для подбора.</small>
+              <label>Этничность (`ethnicity_key`)</label>
               <select value={form.ethnicityKey} onChange={(e) => setField('ethnicityKey', e.target.value)}>
                 {ETHNICITIES.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
               </select>
-              <label>Интересы (3-5)</label>
+              <small className="fieldExample">Пример: european</small>
+              <label>Интересы (`interest_keys`, 3-5)</label>
               <div className="chips">
                 {INTERESTS.map((item) => (
                   <label key={item.key} className="chip">
@@ -442,41 +454,53 @@ function App() {
                   </label>
                 ))}
               </div>
+              <small className="fieldHint">Это стабильные ключи для фильтра в приложении.</small>
             </article>
 
             <article className="card">
               <h2>Тексты</h2>
-              <label>bio_short_ru *</label>
+              <label>Короткое описание RU (`bio_short_i18n.ru`) *</label>
               <textarea value={form.bioShortRu} onChange={(e) => setField('bioShortRu', e.target.value)} />
-              <label>bio_short_en</label>
+              <small className="fieldExample">Пример: Теплая и игривая, любит уютные разговоры.</small>
+              <label>Короткое описание EN (`bio_short_i18n.en`)</label>
               <textarea value={form.bioShortEn} onChange={(e) => setField('bioShortEn', e.target.value)} />
-              <label>bio_full_ru *</label>
+              <small className="fieldExample">Пример: Warm and playful, loves cozy conversations.</small>
+              <label>Полное описание RU (`bio_full_i18n.ru`) *</label>
               <textarea value={form.bioFullRu} onChange={(e) => setField('bioFullRu', e.target.value)} />
-              <label>bio_full_en</label>
+              <small className="fieldExample">Пример: Любит музыку, прогулки и живой флирт без грубости.</small>
+              <label>Полное описание EN (`bio_full_i18n.en`)</label>
               <textarea value={form.bioFullEn} onChange={(e) => setField('bioFullEn', e.target.value)} />
-              <label>speaking_style_ru *</label>
+              <small className="fieldExample">Пример: Loves music, walks, and playful conversations.</small>
+              <label>Стиль общения RU (`speaking_style_i18n.ru`) *</label>
               <textarea value={form.speakingStyleRu} onChange={(e) => setField('speakingStyleRu', e.target.value)} />
-              <label>speaking_style_en</label>
+              <small className="fieldExample">Пример: Коротко, живо, с вопросами и редкими эмодзи.</small>
+              <label>Стиль общения EN (`speaking_style_i18n.en`)</label>
               <textarea value={form.speakingStyleEn} onChange={(e) => setField('speakingStyleEn', e.target.value)} />
-              <label>likes_ru</label>
+              <small className="fieldExample">Пример: Short, engaging, asks follow-up questions.</small>
+              <label>Что любит RU (`likes_i18n.ru`)</label>
               <input value={form.likesRu} onChange={(e) => setField('likesRu', e.target.value)} placeholder="музыка, кино, путешествия" />
-              <label>likes_en</label>
+              <small className="fieldHint">Список через запятую.</small>
+              <label>Что любит EN (`likes_i18n.en`)</label>
               <input value={form.likesEn} onChange={(e) => setField('likesEn', e.target.value)} placeholder="music, movies, travel" />
-              <label>allowed_topics</label>
+              <label>Разрешенные темы (`allowed_topics`)</label>
               <input value={form.allowedTopics} onChange={(e) => setField('allowedTopics', e.target.value)} />
-              <label>taboo_topics</label>
+              <small className="fieldExample">Пример: communication, relationships, lifestyle</small>
+              <label>Табу темы (`taboo_topics`)</label>
               <input value={form.tabooTopics} onChange={(e) => setField('tabooTopics', e.target.value)} />
+              <small className="fieldExample">Пример: violence, illegal, hate, explicit_porn</small>
             </article>
 
             <article className="card">
               <h2>Media</h2>
-              <label>Avatar *</label>
+              <label>Аватар (`story_media.avatar_url`) *</label>
               <input type="file" accept="image/*" onChange={(e) => uploadSingleMedia(e.target.files?.[0], 'avatar')} />
               {form.avatarUrl && <a href={form.avatarUrl} target="_blank" rel="noreferrer">avatar url</a>}
-              <label>Cover</label>
+              <small className="fieldHint">Главная картинка для stories и карточек.</small>
+              <label>Обложка (`story_media.cover_url`)</label>
               <input type="file" accept="image/*" onChange={(e) => uploadSingleMedia(e.target.files?.[0], 'cover')} />
               {form.coverUrl && <a href={form.coverUrl} target="_blank" rel="noreferrer">cover url</a>}
-              <label>Story images</label>
+              <small className="fieldHint">Крупное фото профиля модели.</small>
+              <label>Доп. фото (`story_media.story_image_urls[]`)</label>
               <input type="file" accept="image/*" multiple onChange={(e) => uploadManyMedia(Array.from(e.target.files || []), 'story_image')} />
               {form.storyImageUrls.map((url) => (
                 <div key={url} className="miniRow">
@@ -484,7 +508,7 @@ function App() {
                   <button onClick={() => removeStoryMedia(url, 'story_image')}>x</button>
                 </div>
               ))}
-              <label>Story videos ({'<='}30MB)</label>
+              <label>Видео (`story_media.story_video_urls[]`, {'<='}30MB)</label>
               <input type="file" accept="video/*" multiple onChange={(e) => uploadManyMedia(Array.from(e.target.files || []), 'story_video')} />
               {form.storyVideoUrls.map((url) => (
                 <div key={url} className="miniRow">
