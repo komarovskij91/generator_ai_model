@@ -82,6 +82,7 @@ const defaultForm = {
   coverUrl: '',
   storyImageUrls: [],
   storyVideoUrls: [],
+  chatImageUrls: [],
   sortOrder: 100,
   isActive: true,
   schemaVersion: 4,
@@ -121,6 +122,7 @@ const modelDataFromForm = (form) => ({
     cover_url: form.coverUrl || null,
     story_image_urls: form.storyImageUrls,
     story_video_urls: form.storyVideoUrls,
+    chat_image_urls: form.chatImageUrls,
   },
   is_active: Boolean(form.isActive),
   sort_order: Number(form.sortOrder),
@@ -255,6 +257,7 @@ function App() {
       }
       if (mediaKind === 'story_image') setField('storyImageUrls', [...form.storyImageUrls, ...urls])
       if (mediaKind === 'story_video') setField('storyVideoUrls', [...form.storyVideoUrls, ...urls])
+      if (mediaKind === 'chat_image') setField('chatImageUrls', [...form.chatImageUrls, ...urls])
     } finally {
       setIsLoading(false)
     }
@@ -264,8 +267,10 @@ function App() {
     await adminFetch(`/admin/media?url=${encodeURIComponent(url)}`, { method: 'DELETE' })
     if (mediaKind === 'story_image') {
       setField('storyImageUrls', form.storyImageUrls.filter((item) => item !== url))
-    } else {
+    } else if (mediaKind === 'story_video') {
       setField('storyVideoUrls', form.storyVideoUrls.filter((item) => item !== url))
+    } else if (mediaKind === 'chat_image') {
+      setField('chatImageUrls', form.chatImageUrls.filter((item) => item !== url))
     }
   }
 
@@ -516,6 +521,15 @@ function App() {
                   <button onClick={() => removeStoryMedia(url, 'story_video')}>x</button>
                 </div>
               ))}
+              <label>Фото для чата (`story_media.chat_image_urls[]`)</label>
+              <input type="file" accept="image/*" multiple onChange={(e) => uploadManyMedia(Array.from(e.target.files || []), 'chat_image')} />
+              {form.chatImageUrls.map((url) => (
+                <div key={url} className="miniRow">
+                  <a href={url} target="_blank" rel="noreferrer">{url.slice(0, 40)}...</a>
+                  <button onClick={() => removeStoryMedia(url, 'chat_image')}>x</button>
+                </div>
+              ))}
+              <small className="fieldHint">Эти фото модель будет отправлять в чате при запросе пользователя.</small>
             </article>
           </section>
         </>
