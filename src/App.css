@@ -2,7 +2,6 @@
   max-width: 1280px;
   margin: 0 auto;
   padding: 2rem;
-  text-align: center;
 }
 
 .page {
@@ -143,4 +142,20 @@ pre {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 85%;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #d3d7e0;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #fff;
 }
