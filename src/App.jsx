@@ -83,6 +83,7 @@ const defaultForm = {
   storyImageUrls: [],
   storyVideoUrls: [],
   chatImageUrls: [],
+  chatVideoUrls: [],
   sortOrder: 100,
   isActive: true,
   schemaVersion: 4,
@@ -123,6 +124,7 @@ const modelDataFromForm = (form) => ({
     story_image_urls: form.storyImageUrls,
     story_video_urls: form.storyVideoUrls,
     chat_image_urls: form.chatImageUrls,
+    chat_video_urls: form.chatVideoUrls,
   },
   is_active: Boolean(form.isActive),
   sort_order: Number(form.sortOrder),
@@ -258,6 +260,7 @@ function App() {
       if (mediaKind === 'story_image') setField('storyImageUrls', [...form.storyImageUrls, ...urls])
       if (mediaKind === 'story_video') setField('storyVideoUrls', [...form.storyVideoUrls, ...urls])
       if (mediaKind === 'chat_image') setField('chatImageUrls', [...form.chatImageUrls, ...urls])
+      if (mediaKind === 'chat_video') setField('chatVideoUrls', [...form.chatVideoUrls, ...urls])
     } finally {
       setIsLoading(false)
     }
@@ -271,6 +274,8 @@ function App() {
       setField('storyVideoUrls', form.storyVideoUrls.filter((item) => item !== url))
     } else if (mediaKind === 'chat_image') {
       setField('chatImageUrls', form.chatImageUrls.filter((item) => item !== url))
+    } else if (mediaKind === 'chat_video') {
+      setField('chatVideoUrls', form.chatVideoUrls.filter((item) => item !== url))
     }
   }
 
@@ -527,7 +532,15 @@ function App() {
                 <div key={url} className="miniRow">
                   <a href={url} target="_blank" rel="noreferrer">{url.slice(0, 40)}...</a>
                   <button onClick={() => removeStoryMedia(url, 'chat_image')}>x</button>
-                </div>
+      </div>
+              ))}
+              <label>Видео для чата (`story_media.chat_video_urls[]`, {'<='}30MB)</label>
+              <input type="file" accept="video/*" multiple onChange={(e) => uploadManyMedia(Array.from(e.target.files || []), 'chat_video')} />
+              {form.chatVideoUrls.map((url) => (
+                <div key={url} className="miniRow">
+                  <a href={url} target="_blank" rel="noreferrer">{url.slice(0, 40)}...</a>
+                  <button onClick={() => removeStoryMedia(url, 'chat_video')}>x</button>
+      </div>
               ))}
               <small className="fieldHint">Эти фото модель будет отправлять в чате при запросе пользователя.</small>
             </article>
