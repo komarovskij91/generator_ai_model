@@ -4,6 +4,7 @@ import './App.css'
 const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL || 'https://web-production-c51d.up.railway.app'
 const CONTENT_DRAFT_KEY = 'generator_content_draft_v1'
+const FORM_DRAFT_KEY = 'generator_form_draft_v1'
 const CONTENT_MAX_FILES = 30
 const CONTENT_MIN_FILES = 1
 const CONTENT_MAX_FILE_BYTES = 10 * 1024 * 1024
@@ -98,6 +99,14 @@ const defaultForm = {
   source: 'generator_web',
 }
 
+const readJsonStorage = (key) => {
+  try {
+    return JSON.parse(localStorage.getItem(key) || '{}')
+  } catch {
+    return {}
+  }
+}
+
 const ruSourcePayloadFromForm = (form) => ({
   name_ru: form.nameRu,
   bio_short_ru: form.bioShortRu,
@@ -185,12 +194,12 @@ function App() {
   const [adminLogin, setAdminLogin] = useState(localStorage.getItem('admin_login') || '')
   const [loginDraft, setLoginDraft] = useState(localStorage.getItem('admin_login') || '')
   const [isAuthed, setIsAuthed] = useState(Boolean(localStorage.getItem('admin_login')))
-  const [form, setForm] = useState(defaultForm)
-  const [step, setStep] = useState('form')
+  const [form, setForm] = useState(() => ({ ...defaultForm, ...readJsonStorage(FORM_DRAFT_KEY).form }))
+  const [step, setStep] = useState(() => readJsonStorage(FORM_DRAFT_KEY).step || 'form')
   const [status, setStatus] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [prefillBrief, setPrefillBrief] = useState('')
-  const [prefillImageUrl, setPrefillImageUrl] = useState('')
+  const [prefillBrief, setPrefillBrief] = useState(() => readJsonStorage(FORM_DRAFT_KEY).prefillBrief || '')
+  const [prefillImageUrl, setPrefillImageUrl] = useState(() => readJsonStorage(FORM_DRAFT_KEY).prefillImageUrl || '')
   const [contentSessionId, setContentSessionId] = useState(
     () => JSON.parse(localStorage.getItem(CONTENT_DRAFT_KEY) || '{}').contentSessionId || ''
   )
@@ -403,7 +412,7 @@ function App() {
       const data = await response.json()
       const groups = Array.isArray(data.prompt_groups) ? data.prompt_groups : []
       setContentPromptGroups(groups)
-      const hasActive = groups.some((item) => ['queued', 'running'].includes(item.status))
+      const hasActive = groups.some((item) => item.status === 'running')
       if (hasActive) {
         setTimeout(() => {
           pollContentSession(sessionId, attempts - 1)
@@ -567,6 +576,7 @@ function App() {
       setContentPromptGroups([])
       setContentSelection({})
       localStorage.removeItem(CONTENT_DRAFT_KEY)
+      localStorage.removeItem(FORM_DRAFT_KEY)
       setStep('form')
     } catch (error) {
       setStatus(`Ошибка создания: ${error.message}`)
@@ -585,6 +595,34 @@ function App() {
       })
     )
   }, [contentSessionId, contentPromptGroups, contentSelection])
+
+  useEffect(() => {
+    localStorage.setItem(
+      FORM_DRAFT_KEY,
+      JSON.stringify({
+        form,
+        prefillBrief,
+        prefillImageUrl,
+        step,
+      })
+    )
+  }, [form, prefillBrief, prefillImageUrl, step])
+
+  const resetAllDraftData = () => {
+    const confirmed = window.confirm('Сбросить все заполненные данные и начать новую генерацию?')
+    if (!confirmed) return
+    setForm(defaultForm)
+    setStep('form')
+    setStatus('')
+    setPrefillBrief('')
+    setPrefillImageUrl('')
+    setPastedContentFiles([])
+    setContentSessionId('')
+    setContentPromptGroups([])
+    setContentSelection({})
+    localStorage.removeItem(FORM_DRAFT_KEY)
+    localStorage.removeItem(CONTENT_DRAFT_KEY)
+  }
 
   if (!isAuthed) {
     return (
@@ -607,6 +645,7 @@ function App() {
         <div className="headerActions">
           <button onClick={() => setStep('form')}>Форма</button>
           <button onClick={() => setStep('preview')}>Preview</button>
+          <button onClick={resetAllDraftData}>Новая генерация</button>
           <button onClick={() => { localStorage.removeItem('admin_login'); setIsAuthed(false) }}>Выйти</button>
         </div>
       </header>
@@ -650,7 +689,7 @@ function App() {
                     <p>{group.prompt_ru || group.prompt}</p>
                     <button
                       type="button"
-                      disabled={isLoading || group.status === 'running'}
+                      disabled={isLoading || ['queued', 'running'].includes(group.status)}
                       onClick={() => startKlingForPrompt(group.id)}
                     >
                       Сгенерировать контент
