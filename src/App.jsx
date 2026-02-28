@@ -5,7 +5,7 @@ const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL || 'https://web-production-c51d.up.railway.app'
 const CONTENT_DRAFT_KEY = 'generator_content_draft_v1'
 const CONTENT_MAX_FILES = 30
-const CONTENT_MIN_FILES = 10
+const CONTENT_MIN_FILES = 1
 const CONTENT_MAX_FILE_BYTES = 10 * 1024 * 1024
 const CONTENT_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
@@ -628,7 +628,7 @@ function App() {
 
           <section className="card prefillCard">
             <h2>Генерация контента для модели</h2>
-            <label>Вставка фото (только Ctrl+V, 10-30 шт, jpg/png/webp, до 10MB)</label>
+            <label>Вставка фото (только Ctrl+V, 1-30 шт, jpg/png/webp, до 10MB)</label>
             <div className="pasteZone" onPaste={onPasteContentPhotos} tabIndex={0}>
               Нажми сюда и вставь фотографии через Ctrl+V
             </div>
@@ -650,7 +650,7 @@ function App() {
                     <p>{group.prompt_ru || group.prompt}</p>
                     <button
                       type="button"
-                      disabled={isLoading || ['queued', 'running'].includes(group.status)}
+                      disabled={isLoading || group.status === 'running'}
                       onClick={() => startKlingForPrompt(group.id)}
                     >
                       Сгенерировать контент
