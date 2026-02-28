@@ -1,8 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
 const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL || 'https://web-production-c51d.up.railway.app'
+const CONTENT_DRAFT_KEY = 'generator_content_draft_v1'
+const CONTENT_MAX_FILES = 30
+const CONTENT_MIN_FILES = 10
+const CONTENT_MAX_FILE_BYTES = 10 * 1024 * 1024
+const CONTENT_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
 const ARCHETYPES = [
   { key: 'alt_girl', label: 'Альтушка' },
@@ -84,6 +89,8 @@ const defaultForm = {
   storyVideoUrls: [],
   chatImageUrls: [],
   chatVideoUrls: [],
+  profileImageUrls: [],
+  generatedMediaGroups: [],
   sortOrder: 100,
   isActive: true,
   schemaVersion: 4,
@@ -125,7 +132,9 @@ const modelDataFromForm = (form) => ({
     story_video_urls: form.storyVideoUrls,
     chat_image_urls: form.chatImageUrls,
     chat_video_urls: form.chatVideoUrls,
+    profile_image_urls: form.profileImageUrls,
   },
+  generated_media_groups: form.generatedMediaGroups,
   is_active: Boolean(form.isActive),
   sort_order: Number(form.sortOrder),
   schema_version: Number(form.schemaVersion),
@@ -182,9 +191,20 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [prefillBrief, setPrefillBrief] = useState('')
   const [prefillImageUrl, setPrefillImageUrl] = useState('')
+  const [contentSessionId, setContentSessionId] = useState(
+    () => JSON.parse(localStorage.getItem(CONTENT_DRAFT_KEY) || '{}').contentSessionId || ''
+  )
+  const [contentPromptGroups, setContentPromptGroups] = useState(
+    () => JSON.parse(localStorage.getItem(CONTENT_DRAFT_KEY) || '{}').contentPromptGroups || []
+  )
+  const [contentSelection, setContentSelection] = useState(
+    () => JSON.parse(localStorage.getItem(CONTENT_DRAFT_KEY) || '{}').contentSelection || {}
+  )
+  const [pastedContentFiles, setPastedContentFiles] = useState([])
   const previewModel = useMemo(() => modelDataFromForm(form), [form])
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }))
+  const dedupe = (items) => Array.from(new Set((items || []).filter(Boolean)))
   const toggleArray = (field, value) =>
     setForm((prev) => {
       const exists = prev[field].includes(value)
@@ -284,8 +304,49 @@ function App() {
     if (url) setPrefillImageUrl(url)
   }
 
+  const createContentSession = async () => {
+    if (!prefillImageUrl) {
+      throw new Error('Сначала добавь референс-фото в блоке Предгенерация')
+    }
+    const response = await adminFetch('/admin/content/session/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reference_image_url: prefillImageUrl,
+        brief_text: prefillBrief.trim(),
+      }),
+    })
+    const data = await response.json()
+    setContentSessionId(data.session_id || '')
+    setContentPromptGroups(Array.isArray(data.prompt_groups) ? data.prompt_groups : [])
+    return data.session_id || ''
+  }
+
+  const ensureContentSession = async () => {
+    if (!contentSessionId) {
+      return createContentSession()
+    }
+    try {
+      const response = await adminFetch(`/admin/content/session/${contentSessionId}`)
+      const data = await response.json()
+      if ((data.reference_image_url || '') !== prefillImageUrl) {
+        return createContentSession()
+      }
+      return contentSessionId
+    } catch {
+      return createContentSession()
+    }
+  }
+
   const runPrefill = async () => {
-    if (!prefillBrief.trim() && !prefillImageUrl) return
+    if (!prefillImageUrl) {
+      setStatus('Референс-фото обязательно')
+      return
+    }
+    if (!prefillBrief.trim()) {
+      setStatus('Добавь короткое описание (RU) для предгенерации')
+      return
+    }
     setIsLoading(true)
     setStatus('Предгенерация...')
     try {
@@ -297,9 +358,165 @@ function App() {
       const data = await response.json()
       const patch = normalizePrefillPatch(data.prefill || {})
       setForm((prev) => ({ ...prev, ...patch, avatarUrl: prev.avatarUrl || prefillImageUrl || '' }))
+      await ensureContentSession()
       setStatus('Черновик заполнен')
     } catch (error) {
       setStatus(`Ошибка предгенерации: ${error.message}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const onPasteContentPhotos = (event) => {
+    const items = Array.from(event.clipboardData?.items || [])
+    const imageFiles = items
+      .filter((item) => item.kind === 'file')
+      .map((item) => item.getAsFile())
+      .filter(Boolean)
+    if (!imageFiles.length) {
+      setStatus('В буфере нет изображений')
+      return
+    }
+    const invalidType = imageFiles.find((file) => !CONTENT_ALLOWED_TYPES.has(file.type))
+    if (invalidType) {
+      setStatus(`Неверный формат: ${invalidType.name}. Разрешено: jpg/png/webp`)
+      return
+    }
+    const tooBig = imageFiles.find((file) => file.size > CONTENT_MAX_FILE_BYTES)
+    if (tooBig) {
+      setStatus(`Файл больше 10MB: ${tooBig.name}`)
+      return
+    }
+    const next = [...pastedContentFiles, ...imageFiles]
+    if (next.length > CONTENT_MAX_FILES) {
+      setStatus(`Можно вставить максимум ${CONTENT_MAX_FILES} файлов`)
+      return
+    }
+    setPastedContentFiles(next)
+    setStatus(`Добавлено фото: ${imageFiles.length}. Всего: ${next.length}`)
+  }
+
+  const clearPastedPhotos = () => {
+    setPastedContentFiles([])
+  }
+
+  const pollContentSession = async (sessionId, attempts = 50) => {
+    if (!sessionId || attempts <= 0) return
+    try {
+      const response = await adminFetch(`/admin/content/session/${sessionId}`)
+      const data = await response.json()
+      const groups = Array.isArray(data.prompt_groups) ? data.prompt_groups : []
+      setContentPromptGroups(groups)
+      const hasActive = groups.some((item) => ['queued', 'running'].includes(item.status))
+      if (hasActive) {
+        setTimeout(() => {
+          pollContentSession(sessionId, attempts - 1)
+        }, 3500)
+      }
+    } catch {
+      // ignore polling errors to not block manual refresh
+    }
+  }
+
+  const generateContentPrompts = async () => {
+    if (pastedContentFiles.length < CONTENT_MIN_FILES || pastedContentFiles.length > CONTENT_MAX_FILES) {
+      setStatus(`Нужно вставить от ${CONTENT_MIN_FILES} до ${CONTENT_MAX_FILES} фото`)
+      return
+    }
+    setIsLoading(true)
+    setStatus('Генерирую промты...')
+    try {
+      const sessionId = await ensureContentSession()
+      const formData = new FormData()
+      pastedContentFiles.forEach((file) => formData.append('files', file))
+      const response = await adminFetch(`/admin/content/session/${sessionId}/generate-prompts`, {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await response.json()
+      setContentPromptGroups(Array.isArray(data.prompt_groups) ? data.prompt_groups : [])
+      setStatus(`Промты готовы: ${Array.isArray(data.prompt_groups) ? data.prompt_groups.length : 0}`)
+    } catch (error) {
+      setStatus(`Ошибка генерации промтов: ${error.message}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const startKlingForPrompt = async (promptId) => {
+    if (!contentSessionId) {
+      setStatus('Сначала создай контент-сессию')
+      return
+    }
+    setIsLoading(true)
+    try {
+      await adminFetch(`/admin/content/session/${contentSessionId}/kling/${promptId}/start`, {
+        method: 'POST',
+      })
+      setStatus('Kling-задача запущена')
+      pollContentSession(contentSessionId, 120)
+    } catch (error) {
+      setStatus(`Ошибка запуска Kling: ${error.message}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const toggleGeneratedSelection = (promptId, url, target) => {
+    const key = `${promptId}|||${url}`
+    setContentSelection((prev) => {
+      const current = prev[key] || { story: false, chat: false, profile: false }
+      const nextItem = { ...current, [target]: !current[target] }
+      return { ...prev, [key]: nextItem }
+    })
+  }
+
+  const applyGeneratedMedia = async () => {
+    if (!contentSessionId) {
+      setStatus('Нет контент-сессии')
+      return
+    }
+    const selected = Object.entries(contentSelection)
+      .map(([compoundKey, flags]) => {
+        const [promptId, url] = compoundKey.split('|||')
+        const targets = []
+        if (flags.story) targets.push('story')
+        if (flags.chat) targets.push('chat')
+        if (flags.profile) targets.push('profile')
+        return { prompt_id: promptId, url, targets }
+      })
+      .filter((item) => item.targets.length > 0)
+    if (!selected.length) {
+      setStatus('Отметь хотя бы одну картинку чекбоксами')
+      return
+    }
+    setIsLoading(true)
+    setStatus('Применяю и загружаю в R2...')
+    try {
+      const response = await adminFetch(`/admin/content/session/${contentSessionId}/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selected,
+          model_slug: form.slug || 'new_model',
+        }),
+      })
+      const data = await response.json()
+      const patch = data.patch || {}
+      const media = patch.story_media || {}
+      setForm((prev) => ({
+        ...prev,
+        storyImageUrls: dedupe([...(prev.storyImageUrls || []), ...(media.story_image_urls || [])]),
+        chatImageUrls: dedupe([...(prev.chatImageUrls || []), ...(media.chat_image_urls || [])]),
+        profileImageUrls: dedupe([...(prev.profileImageUrls || []), ...(media.profile_image_urls || [])]),
+        generatedMediaGroups: patch.generated_media_groups || prev.generatedMediaGroups,
+      }))
+      if (data.session?.prompt_groups) {
+        setContentPromptGroups(data.session.prompt_groups)
+      }
+      setStatus('Готово: payload обновлен')
+    } catch (error) {
+      setStatus(`Ошибка apply: ${error.message}`)
     } finally {
       setIsLoading(false)
     }
@@ -349,6 +566,11 @@ function App() {
       setForm(defaultForm)
       setPrefillImageUrl('')
       setPrefillBrief('')
+      setPastedContentFiles([])
+      setContentSessionId('')
+      setContentPromptGroups([])
+      setContentSelection({})
+      localStorage.removeItem(CONTENT_DRAFT_KEY)
       setStep('form')
     } catch (error) {
       setStatus(`Ошибка создания: ${error.message}`)
@@ -356,6 +578,17 @@ function App() {
       setIsLoading(false)
     }
   }
+
+  useEffect(() => {
+    localStorage.setItem(
+      CONTENT_DRAFT_KEY,
+      JSON.stringify({
+        contentSessionId,
+        contentPromptGroups,
+        contentSelection,
+      })
+    )
+  }, [contentSessionId, contentPromptGroups, contentSelection])
 
   if (!isAuthed) {
     return (
@@ -390,10 +623,66 @@ function App() {
             <textarea value={prefillBrief} onChange={(e) => setPrefillBrief(e.target.value)} />
             <small className="fieldHint">Что это: свободный текст для первичного автозаполнения.</small>
             <small className="fieldExample">Пример: Брюнетка 25 лет, уверенная, любит музыку и путешествия.</small>
-            <label>1 фото-референс (опционально)</label>
+            <label>1 фото-референс (обязательно)</label>
             <input type="file" accept="image/*" onChange={(e) => uploadPrefillPhoto(e.target.files?.[0])} />
             {prefillImageUrl && <a href={prefillImageUrl} target="_blank" rel="noreferrer">Открыть фото</a>}
             <button disabled={isLoading} onClick={runPrefill}>Сгенерировать черновик</button>
+            <small className="fieldHint">Это же фото используется как основной референс для Kling.</small>
+          </section>
+
+          <section className="card prefillCard">
+            <h2>Генерация контента для модели</h2>
+            <label>Вставка фото (только Ctrl+V, 10-30 шт, jpg/png/webp, до 10MB)</label>
+            <div className="pasteZone" onPaste={onPasteContentPhotos} tabIndex={0}>
+              Нажми сюда и вставь фотографии через Ctrl+V
+            </div>
+            <div className="miniRow">
+              <span>Добавлено: {pastedContentFiles.length}</span>
+              <button type="button" onClick={clearPastedPhotos}>Очистить</button>
+            </div>
+            <button disabled={isLoading || !prefillImageUrl} onClick={generateContentPrompts}>
+              Сгенерировать промты по фото
+            </button>
+            {!!contentPromptGroups.length && (
+              <div className="contentPromptList">
+                {contentPromptGroups.map((group) => (
+                  <article key={group.id} className="contentPromptCard">
+                    <div className="miniRow">
+                      <strong>Промт {Number(group.index || 0) + 1}</strong>
+                      <span>{group.status_ru || '—'}</span>
+                    </div>
+                    <p>{group.prompt_ru || group.prompt}</p>
+                    <button
+                      type="button"
+                      disabled={isLoading || ['queued', 'running'].includes(group.status)}
+                      onClick={() => startKlingForPrompt(group.id)}
+                    >
+                      Сгенерировать контент
+                    </button>
+                    {!!group.kling_output_urls?.length && (
+                      <div className="generatedGrid">
+                        {group.kling_output_urls.map((url) => {
+                          const key = `${group.id}|||${url}`
+                          const checked = contentSelection[key] || { story: false, chat: false, profile: false }
+                          return (
+                            <div key={url} className="generatedItem">
+                              <img src={url} alt="generated" />
+                              <label><input type="checkbox" checked={checked.story} onChange={() => toggleGeneratedSelection(group.id, url, 'story')} /> сторис</label>
+                              <label><input type="checkbox" checked={checked.chat} onChange={() => toggleGeneratedSelection(group.id, url, 'chat')} /> фото для чата</label>
+                              <label><input type="checkbox" checked={checked.profile} onChange={() => toggleGeneratedSelection(group.id, url, 'profile')} /> фото для профиля</label>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {group.error && <small className="fieldHint">Ошибка: {String(group.error)}</small>}
+                  </article>
+                ))}
+              </div>
+            )}
+            <button disabled={isLoading || !contentPromptGroups.length} onClick={applyGeneratedMedia}>
+              Применить (R2 + Payload)
+            </button>
           </section>
 
           <section className="grid">
@@ -533,6 +822,12 @@ function App() {
                   <a href={url} target="_blank" rel="noreferrer">{url.slice(0, 40)}...</a>
                   <button onClick={() => removeStoryMedia(url, 'chat_image')}>x</button>
       </div>
+              ))}
+              <label>Фото для профиля (`story_media.profile_image_urls[]`)</label>
+              {form.profileImageUrls.map((url) => (
+                <div key={url} className="miniRow">
+                  <a href={url} target="_blank" rel="noreferrer">{url.slice(0, 40)}...</a>
+                </div>
               ))}
               <label>Видео для чата (`story_media.chat_video_urls[]`, {'<='}30MB)</label>
               <input type="file" accept="video/*" multiple onChange={(e) => uploadManyMedia(Array.from(e.target.files || []), 'chat_video')} />

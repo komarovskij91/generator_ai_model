@@ -159,3 +159,54 @@ pre {
   padding: 6px 10px;
   background: #fff;
 }
+
+.pasteZone {
+  border: 2px dashed #9ca3af;
+  border-radius: 10px;
+  padding: 14px;
+  min-height: 58px;
+  color: #4b5563;
+  background: #f8fafc;
+  cursor: text;
+}
+
+.contentPromptList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.contentPromptCard {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+}
+
+.contentPromptCard p {
+  margin: 8px 0;
+}
+
+.generatedGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.generatedItem {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 6px;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.generatedItem img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 8px;
+}
