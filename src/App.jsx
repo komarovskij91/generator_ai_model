@@ -343,10 +343,6 @@ function App() {
       setStatus('Референс-фото обязательно')
       return
     }
-    if (!prefillBrief.trim()) {
-      setStatus('Добавь короткое описание (RU) для предгенерации')
-      return
-    }
     setIsLoading(true)
     setStatus('Предгенерация...')
     try {
