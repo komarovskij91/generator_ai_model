@@ -85,6 +85,7 @@ const defaultForm = {
   tabooTopics: '',
   systemPromptCore: '',
   avatarUrl: '',
+  avatarVideoUrl: '',
   coverUrl: '',
   storyImageUrls: [],
   storyVideoUrls: [],
@@ -136,6 +137,7 @@ const modelDataFromForm = (form) => ({
   system_prompt_core: form.systemPromptCore,
   story_media: {
     avatar_url: form.avatarUrl || null,
+    avatar_video_url: form.avatarVideoUrl || null,
     cover_url: form.coverUrl || null,
     story_image_urls: form.storyImageUrls,
     story_video_urls: form.storyVideoUrls,
@@ -271,6 +273,7 @@ function App() {
       const url = await uploadMedia(file, mediaKind)
       if (!url) return
       if (mediaKind === 'avatar') setField('avatarUrl', url)
+      if (mediaKind === 'avatar_video') setField('avatarVideoUrl', url)
       if (mediaKind === 'cover') setField('coverUrl', url)
     } finally {
       setIsLoading(false)
@@ -830,6 +833,9 @@ function App() {
               <input type="file" accept="image/*" onChange={(e) => uploadSingleMedia(e.target.files?.[0], 'avatar')} />
               {form.avatarUrl && <a href={form.avatarUrl} target="_blank" rel="noreferrer">avatar url</a>}
               <small className="fieldHint">Главная картинка для stories и карточек.</small>
+              <label>Видео-аватар (`story_media.avatar_video_url`)</label>
+              <input type="file" accept="video/*" onChange={(e) => uploadSingleMedia(e.target.files?.[0], 'avatar_video')} />
+              {form.avatarVideoUrl && <a href={form.avatarVideoUrl} target="_blank" rel="noreferrer">avatar video url</a>}
               <label>Обложка (`story_media.cover_url`)</label>
               <input type="file" accept="image/*" onChange={(e) => uploadSingleMedia(e.target.files?.[0], 'cover')} />
               {form.coverUrl && <a href={form.coverUrl} target="_blank" rel="noreferrer">cover url</a>}
