@@ -204,6 +204,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [prefillBrief, setPrefillBrief] = useState(() => readJsonStorage(FORM_DRAFT_KEY).prefillBrief || '')
   const [prefillImageUrl, setPrefillImageUrl] = useState(() => readJsonStorage(FORM_DRAFT_KEY).prefillImageUrl || '')
+  const [prefillGender, setPrefillGender] = useState(() => readJsonStorage(FORM_DRAFT_KEY).prefillGender || 'female')
   const [contentSessionId, setContentSessionId] = useState(
     () => JSON.parse(localStorage.getItem(CONTENT_DRAFT_KEY) || '{}').contentSessionId || ''
   )
@@ -371,7 +372,11 @@ function App() {
       const response = await adminFetch('/admin/prefill-model', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brief_text: prefillBrief.trim(), image_url: prefillImageUrl || null }),
+        body: JSON.stringify({
+          brief_text: prefillBrief.trim(),
+          image_url: prefillImageUrl || null,
+          preferred_gender: prefillGender,
+        }),
       })
       const data = await response.json()
       const patch = normalizePrefillPatch(data.prefill || {})
@@ -616,10 +621,11 @@ function App() {
         form,
         prefillBrief,
         prefillImageUrl,
+        prefillGender,
         step,
       })
     )
-  }, [form, prefillBrief, prefillImageUrl, step])
+  }, [form, prefillBrief, prefillImageUrl, prefillGender, step])
 
   const resetAllDraftData = () => {
     const confirmed = window.confirm('Сбросить все заполненные данные и начать новую генерацию?')
@@ -629,6 +635,7 @@ function App() {
     setStatus('')
     setPrefillBrief('')
     setPrefillImageUrl('')
+    setPrefillGender('female')
     setPastedContentFiles([])
     setContentSessionId('')
     setContentPromptGroups([])
@@ -673,6 +680,29 @@ function App() {
             <small className="fieldExample">Пример: Брюнетка 25 лет, уверенная, любит музыку и путешествия.</small>
             <label>1 фото-референс (обязательно)</label>
             <input type="file" accept="image/*" onChange={(e) => uploadPrefillPhoto(e.target.files?.[0])} />
+            <label>Кого заполняем (для prefill)</label>
+            <div className="miniRow">
+              <label>
+                <input
+                  type="radio"
+                  name="prefillGender"
+                  value="female"
+                  checked={prefillGender === 'female'}
+                  onChange={(e) => setPrefillGender(e.target.value)}
+                />
+                женщина
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="prefillGender"
+                  value="male"
+                  checked={prefillGender === 'male'}
+                  onChange={(e) => setPrefillGender(e.target.value)}
+                />
+                мужчина
+              </label>
+            </div>
             {prefillImageUrl && <a href={prefillImageUrl} target="_blank" rel="noreferrer">Открыть фото</a>}
             <button disabled={isLoading} onClick={runPrefill}>Сгенерировать черновик</button>
             <small className="fieldHint">Это же фото используется как основной референс для Kling.</small>
