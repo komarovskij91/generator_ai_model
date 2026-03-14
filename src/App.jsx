@@ -10,15 +10,15 @@ const CONTENT_MIN_FILES = 1
 const CONTENT_MAX_FILE_BYTES = 10 * 1024 * 1024
 const CONTENT_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
-const ARCHETYPES = [
-  { key: 'alt_girl', label: 'Альтушка' },
-  { key: 'student_18_plus', label: 'Студентка (18+)' },
-  { key: 'romantic', label: 'Романтичная' },
-  { key: 'playful', label: 'Игривый вайб' },
-  { key: 'confident', label: 'Уверенная' },
-  { key: 'caring', label: 'Заботливая' },
-  { key: 'creative', label: 'Творческая' },
-  { key: 'sporty', label: 'Спортивная' },
+const ARCHETYPE_META = [
+  { key: 'alt_girl', labels: { female: 'Альтушка', male: 'Альт-парень' } },
+  { key: 'student_18_plus', labels: { female: 'Студентка (18+)', male: 'Студент (18+)' } },
+  { key: 'romantic', labels: { female: 'Романтичная', male: 'Романтичный' } },
+  { key: 'playful', labels: { female: 'Игривый вайб', male: 'Игривый вайб' } },
+  { key: 'confident', labels: { female: 'Уверенная', male: 'Уверенный' } },
+  { key: 'caring', labels: { female: 'Заботливая', male: 'Заботливый' } },
+  { key: 'creative', labels: { female: 'Творческая', male: 'Творческий' } },
+  { key: 'sporty', labels: { female: 'Спортивная', male: 'Спортивный' } },
 ]
 
 const INTERESTS = [
@@ -34,12 +34,14 @@ const INTERESTS = [
   { key: 'books_reading', label: 'Книги и чтение' },
 ]
 
-const ETHNICITIES = [
-  { key: 'european', label: 'Европейка' },
-  { key: 'east_asian', label: 'Восточноазиатская' },
-  { key: 'black', label: 'Чернокожая' },
-  { key: 'latina', label: 'Латиноамериканка' },
+const ETHNICITY_META = [
+  { key: 'european', labels: { female: 'Европейка', male: 'Европеец' } },
+  { key: 'east_asian', labels: { female: 'Восточноазиатская', male: 'Восточноазиатский' } },
+  { key: 'black', labels: { female: 'Чернокожая', male: 'Чернокожий' } },
+  { key: 'latina', labels: { female: 'Латиноамериканка', male: 'Латиноамериканец' } },
 ]
+
+const pickGenderLabel = (labels, gender) => labels?.[gender] || labels?.female || labels?.male || ''
 
 const splitList = (value) =>
   (value || '')
@@ -213,6 +215,14 @@ function App() {
   )
   const [pastedContentFiles, setPastedContentFiles] = useState([])
   const previewModel = useMemo(() => modelDataFromForm(form), [form])
+  const archetypeOptions = useMemo(
+    () => ARCHETYPE_META.map((item) => ({ key: item.key, label: pickGenderLabel(item.labels, form.gender) })),
+    [form.gender]
+  )
+  const ethnicityOptions = useMemo(
+    () => ETHNICITY_META.map((item) => ({ key: item.key, label: pickGenderLabel(item.labels, form.gender) })),
+    [form.gender]
+  )
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }))
   const dedupe = (items) => Array.from(new Set((items || []).filter(Boolean)))
@@ -761,7 +771,7 @@ function App() {
               <h2>Фильтры (обязательно)</h2>
               <label>Типажи (`archetype_keys`, 1-3)</label>
               <div className="chips">
-                {ARCHETYPES.map((item) => (
+                {archetypeOptions.map((item) => (
                   <label key={item.key} className="chip">
                     <input
                       type="checkbox"
@@ -775,7 +785,7 @@ function App() {
               <small className="fieldHint">Что это: характерный вайб модели для подбора.</small>
               <label>Этничность (`ethnicity_key`)</label>
               <select value={form.ethnicityKey} onChange={(e) => setField('ethnicityKey', e.target.value)}>
-                {ETHNICITIES.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+                {ethnicityOptions.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
               </select>
               <small className="fieldExample">Пример: european</small>
               <label>Интересы (`interest_keys`, 3-5)</label>
