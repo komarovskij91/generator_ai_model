@@ -329,6 +329,17 @@ function App() {
     }
     setPushSending(true)
     const modelIdForSend = effectivePushModelId() || null
+    if (!modelIdForSend) {
+      appendPushLog(
+        'warn',
+        'Модель не выбрана: уйдёт обычный alert без NSE (не будет Communication Notifications и диплинка в чат).'
+      )
+    } else {
+      appendPushLog(
+        'info',
+        'В payload: chat_model_id (+ при наличии в Redis: chat_model_avatar_url, chat_model_name), aps.mutable-content=1 → Noloo NotificationService (communication).'
+      )
+    }
     appendPushLog('info', `Отправка тестового push (${userIds.length} польз.)…`, {
       title: pushTitle,
       body: pushBody,
@@ -833,7 +844,9 @@ function App() {
         <section className="card notificationsPanel">
           <h2>Тестовые push-уведомления</h2>
           <p className="fieldHint">
-            Заполните заголовок и текст, отметьте галочками пользователей в списке ниже и нажмите «Отправить».
+            Заполните заголовок и текст, отметьте пользователей и нажмите «Отправить». Чтобы проверить{' '}
+            <strong>Communication Notifications</strong> (большой аватар + бейдж приложения), обязательно выберите модель
+            или укажите <code>model_id</code> вручную и тестируйте на <strong>реальном устройстве</strong> (не симулятор).
           </p>
           <label htmlFor="push-title">Заголовок</label>
           <input
@@ -874,9 +887,10 @@ function App() {
             placeholder="slug, если модели нет в списке (имеет приоритет над выбором)"
           />
           <small className="fieldHint">
-            Если выбрана модель или указан slug: заголовок пуша на бэкенде подставится из имени модели; в payload уйдут{' '}
-            <code>chat_model_id</code> и <code>chat_model_avatar_url</code> (аватар для будущего rich-push через
-            Notification Service Extension — см. docs/IOS_TELEGRAM_STYLE_PUSH.md).
+            С моделью: бэкенд подставит имя в заголовок и отправит <code>chat_model_id</code>,{' '}
+            <code>chat_model_name</code>, при наличии в данных модели — <code>chat_model_avatar_url</code> (https), плюс{' '}
+            <code>aps.mutable-content: 1</code> чтобы запустился Notification Service и собрался communication-push.
+            Тап по уведомлению открывает чат с этой моделью в приложении.
           </small>
           <button type="button" className="primaryAction" disabled={pushSending} onClick={sendAdminTestPush}>
             {pushSending ? 'Отправка…' : 'Отправить'}
