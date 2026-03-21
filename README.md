@@ -45,6 +45,11 @@ Backend (`ai_chat_back`) must expose:
 - `POST /admin/models`
 - `GET /admin/push/candidates` — пользователи с зарегистрированными push-устройствами (для админки «Уведомления»)
 - `POST /admin/push/send-test` — тестовый APNS выбранным `user_ids` (`title`, `body`, опционально `model_id`)
+- Публичный `GET /models/active` — список моделей для выпадающего списка на вкладке «Уведомления»
+
+## Rich-push / аватар в уведомлении (iOS)
+
+Как сделать превью «как в Telegram» (Notification Service Extension vs Communication Notifications) и какие ключи ждать в payload — см. [docs/IOS_TELEGRAM_STYLE_PUSH.md](docs/IOS_TELEGRAM_STYLE_PUSH.md).
 
 ## Prompt generation notes
 

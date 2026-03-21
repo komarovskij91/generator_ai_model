@@ -207,6 +207,8 @@ function App() {
   const [pushTitle, setPushTitle] = useState('Noloo')
   const [pushBody, setPushBody] = useState('Тестовое уведомление')
   const [pushModelId, setPushModelId] = useState('')
+  const [pushModelManual, setPushModelManual] = useState('')
+  const [pushModelsList, setPushModelsList] = useState([])
   const [pushSelected, setPushSelected] = useState({})
   const [pushLog, setPushLog] = useState([])
   const [pushLoading, setPushLoading] = useState(false)
@@ -270,17 +272,34 @@ function App() {
     )
   }
 
+  const effectivePushModelId = () => {
+    const manual = pushModelManual.trim()
+    if (manual) return manual
+    return pushModelId.trim()
+  }
+
   const loadPushCandidates = async () => {
     setPushLoading(true)
-    appendPushLog('info', 'Загрузка списка пользователей с зарегистрированными устройствами…')
+    appendPushLog('info', 'Загрузка пользователей с устройствами и каталога моделей…')
     try {
       const response = await adminFetch('/admin/push/candidates')
       const data = await response.json()
       const items = Array.isArray(data.items) ? data.items : []
       setPushCandidates(items)
-      appendPushLog('ok', `Загружено кандидатов: ${items.length}`)
+      appendPushLog('ok', `Пользователей с устройствами: ${items.length}`)
     } catch (error) {
-      appendPushLog('err', `Список не загружен: ${error.message}`)
+      appendPushLog('err', `Список пользователей не загружен: ${error.message}`)
+    }
+    try {
+      const mResponse = await fetch(`${BACKEND_BASE_URL}/models/active`)
+      const raw = await mResponse.text()
+      if (!mResponse.ok) throw new Error(raw)
+      const mData = JSON.parse(raw)
+      const models = Array.isArray(mData) ? mData : []
+      setPushModelsList(models)
+      appendPushLog('ok', `Моделей в каталоге: ${models.length}`)
+    } catch (error) {
+      appendPushLog('warn', `Каталог моделей не загружен: ${error.message}`)
     } finally {
       setPushLoading(false)
     }
@@ -309,10 +328,11 @@ function App() {
       return
     }
     setPushSending(true)
+    const modelIdForSend = effectivePushModelId() || null
     appendPushLog('info', `Отправка тестового push (${userIds.length} польз.)…`, {
       title: pushTitle,
       body: pushBody,
-      model_id: pushModelId.trim() || null,
+      model_id: modelIdForSend,
       user_ids: userIds,
     })
     try {
@@ -323,7 +343,7 @@ function App() {
           user_ids: userIds,
           title: pushTitle.trim() || null,
           body: pushBody.trim() || null,
-          model_id: pushModelId.trim() || null,
+          model_id: modelIdForSend,
         }),
       })
       const data = await response.json()
@@ -830,13 +850,34 @@ function App() {
             onChange={(e) => setPushBody(e.target.value)}
             placeholder="Короткий текст на экране уведомления"
           />
-          <label htmlFor="push-model-id">model_id (опционально)</label>
+          <label htmlFor="push-model-select">От какой модели</label>
+          <select
+            id="push-model-select"
+            value={pushModelManual ? '' : pushModelId}
+            onChange={(e) => {
+              setPushModelId(e.target.value)
+              setPushModelManual('')
+            }}
+          >
+            <option value="">— Не выбрано (только заголовок выше) —</option>
+            {pushModelsList.map((m) => (
+              <option key={m.id} value={m.id}>
+                {(m.name && String(m.name).trim()) || m.id} · {m.id}
+              </option>
+            ))}
+          </select>
+          <label htmlFor="push-model-manual">Или model_id вручную</label>
           <input
-            id="push-model-id"
-            value={pushModelId}
-            onChange={(e) => setPushModelId(e.target.value)}
-            placeholder="slug модели → в payload chat_model_id; title может подставиться из имени модели"
+            id="push-model-manual"
+            value={pushModelManual}
+            onChange={(e) => setPushModelManual(e.target.value)}
+            placeholder="slug, если модели нет в списке (имеет приоритет над выбором)"
           />
+          <small className="fieldHint">
+            Если выбрана модель или указан slug: заголовок пуша на бэкенде подставится из имени модели; в payload уйдут{' '}
+            <code>chat_model_id</code> и <code>chat_model_avatar_url</code> (аватар для будущего rich-push через
+            Notification Service Extension — см. docs/IOS_TELEGRAM_STYLE_PUSH.md).
+          </small>
           <button type="button" className="primaryAction" disabled={pushSending} onClick={sendAdminTestPush}>
             {pushSending ? 'Отправка…' : 'Отправить'}
           </button>
