@@ -202,6 +202,15 @@ function App() {
   const [step, setStep] = useState(() => readJsonStorage(FORM_DRAFT_KEY).step || 'form')
   const [status, setStatus] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [mainTab, setMainTab] = useState('generator')
+  const [pushCandidates, setPushCandidates] = useState([])
+  const [pushTitle, setPushTitle] = useState('Noloo')
+  const [pushBody, setPushBody] = useState('Тестовое уведомление')
+  const [pushModelId, setPushModelId] = useState('')
+  const [pushSelected, setPushSelected] = useState({})
+  const [pushLog, setPushLog] = useState([])
+  const [pushLoading, setPushLoading] = useState(false)
+  const [pushSending, setPushSending] = useState(false)
   const [prefillBrief, setPrefillBrief] = useState(() => readJsonStorage(FORM_DRAFT_KEY).prefillBrief || '')
   const [prefillImageUrl, setPrefillImageUrl] = useState(() => readJsonStorage(FORM_DRAFT_KEY).prefillImageUrl || '')
   const [prefillGender, setPrefillGender] = useState(() => readJsonStorage(FORM_DRAFT_KEY).prefillGender || 'female')
@@ -245,6 +254,101 @@ function App() {
     if (!response.ok) throw new Error(await response.text())
     return response
   }
+
+  const appendPushLog = (level, message, detail) => {
+    setPushLog((prev) =>
+      [
+        {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          ts: new Date().toLocaleString('ru-RU'),
+          level,
+          message,
+          detail,
+        },
+        ...prev,
+      ].slice(0, 200)
+    )
+  }
+
+  const loadPushCandidates = async () => {
+    setPushLoading(true)
+    appendPushLog('info', 'Загрузка списка пользователей с зарегистрированными устройствами…')
+    try {
+      const response = await adminFetch('/admin/push/candidates')
+      const data = await response.json()
+      const items = Array.isArray(data.items) ? data.items : []
+      setPushCandidates(items)
+      appendPushLog('ok', `Загружено кандидатов: ${items.length}`)
+    } catch (error) {
+      appendPushLog('err', `Список не загружен: ${error.message}`)
+    } finally {
+      setPushLoading(false)
+    }
+  }
+
+  const togglePushUser = (userId) => {
+    setPushSelected((prev) => ({ ...prev, [userId]: !prev[userId] }))
+  }
+
+  const selectAllPushUsers = () => {
+    const next = {}
+    pushCandidates.forEach((c) => {
+      next[c.user_id] = true
+    })
+    setPushSelected(next)
+  }
+
+  const clearPushSelection = () => setPushSelected({})
+
+  const sendAdminTestPush = async () => {
+    const userIds = Object.entries(pushSelected)
+      .filter(([, on]) => on)
+      .map(([id]) => id)
+    if (!userIds.length) {
+      appendPushLog('warn', 'Отметьте галочками хотя бы одного пользователя ниже')
+      return
+    }
+    setPushSending(true)
+    appendPushLog('info', `Отправка тестового push (${userIds.length} польз.)…`, {
+      title: pushTitle,
+      body: pushBody,
+      model_id: pushModelId.trim() || null,
+      user_ids: userIds,
+    })
+    try {
+      const response = await adminFetch('/admin/push/send-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_ids: userIds,
+          title: pushTitle.trim() || null,
+          body: pushBody.trim() || null,
+          model_id: pushModelId.trim() || null,
+        }),
+      })
+      const data = await response.json()
+      const results = Array.isArray(data.results) ? data.results : []
+      results.forEach((row) => {
+        if (row.error) {
+          appendPushLog('err', `${row.user_id}: ошибка`, row)
+        } else {
+          appendPushLog(row.failed > 0 ? 'warn' : 'ok', `${row.user_id}: sent=${row.sent} failed=${row.failed}`, row)
+        }
+      })
+      appendPushLog('info', `Ответ обработан, записей: ${results.length}`)
+    } catch (error) {
+      appendPushLog('err', `Запрос send-test: ${error.message}`)
+    } finally {
+      setPushSending(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthed || mainTab !== 'notifications') return
+    loadPushCandidates()
+    // Перезагрузка списка только при смене вкладки / авторизации; не привязываемся к телу loadPushCandidates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthed, mainTab])
 
   const login = async () => {
     setIsLoading(true)
@@ -661,16 +765,131 @@ function App() {
   return (
     <main className="page">
       <header className="header">
-        <h1>Generator AI Model (v4)</h1>
+        <div className="headerBrand">
+          <h1>Generator AI Model (v4)</h1>
+          <nav className="topTabs" aria-label="Разделы">
+            <button
+              type="button"
+              className={mainTab === 'generator' ? 'topTab active' : 'topTab'}
+              onClick={() => setMainTab('generator')}
+            >
+              Генератор
+            </button>
+            <button
+              type="button"
+              className={mainTab === 'notifications' ? 'topTab active' : 'topTab'}
+              onClick={() => setMainTab('notifications')}
+            >
+              Уведомления
+            </button>
+          </nav>
+        </div>
         <div className="headerActions">
-          <button onClick={() => setStep('form')}>Форма</button>
-          <button onClick={() => setStep('preview')}>Preview</button>
-          <button onClick={resetAllDraftData}>Новая генерация</button>
-          <button onClick={() => { localStorage.removeItem('admin_login'); setIsAuthed(false) }}>Выйти</button>
+          {mainTab === 'generator' && (
+            <>
+              <button type="button" onClick={() => setStep('form')}>Форма</button>
+              <button type="button" onClick={() => setStep('preview')}>Preview</button>
+              <button type="button" onClick={resetAllDraftData}>Новая генерация</button>
+            </>
+          )}
+          {mainTab === 'notifications' && (
+            <button type="button" disabled={pushLoading} onClick={loadPushCandidates}>
+              Обновить список
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.removeItem('admin_login')
+              setIsAuthed(false)
+            }}
+          >
+            Выйти
+          </button>
         </div>
       </header>
 
-      {step === 'form' && (
+      {mainTab === 'notifications' && (
+        <section className="card notificationsPanel">
+          <h2>Тестовые push-уведомления</h2>
+          <p className="fieldHint">
+            Заполните заголовок и текст, отметьте галочками пользователей в списке ниже и нажмите «Отправить».
+          </p>
+          <label htmlFor="push-title">Заголовок</label>
+          <input
+            id="push-title"
+            value={pushTitle}
+            onChange={(e) => setPushTitle(e.target.value)}
+            placeholder="Noloo"
+          />
+          <label htmlFor="push-body">Текст уведомления</label>
+          <textarea
+            id="push-body"
+            rows={4}
+            value={pushBody}
+            onChange={(e) => setPushBody(e.target.value)}
+            placeholder="Короткий текст на экране уведомления"
+          />
+          <label htmlFor="push-model-id">model_id (опционально)</label>
+          <input
+            id="push-model-id"
+            value={pushModelId}
+            onChange={(e) => setPushModelId(e.target.value)}
+            placeholder="slug модели → в payload chat_model_id; title может подставиться из имени модели"
+          />
+          <button type="button" className="primaryAction" disabled={pushSending} onClick={sendAdminTestPush}>
+            {pushSending ? 'Отправка…' : 'Отправить'}
+          </button>
+
+          <div className="pushListHeader">
+            <h3>Пользователи с устройствами для push</h3>
+            <div className="miniRow">
+              <button type="button" onClick={selectAllPushUsers} disabled={!pushCandidates.length}>
+                Выбрать всех
+              </button>
+              <button type="button" onClick={clearPushSelection}>
+                Снять все
+              </button>
+            </div>
+          </div>
+          {pushLoading && <p className="status">Загрузка списка…</p>}
+          {!pushLoading && !pushCandidates.length && (
+            <p className="fieldHint">Пока никого нет. Откройте приложение, разрешите уведомления и нажмите «Обновить список».</p>
+          )}
+          <ul className="pushUserList">
+            {pushCandidates.map((u) => (
+              <li key={u.user_id}>
+                <label className="pushUserRow">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(pushSelected[u.user_id])}
+                    onChange={() => togglePushUser(u.user_id)}
+                  />
+                  <span className="pushUserId">{u.user_id}</span>
+                  {u.name ? <span className="pushUserName">{u.name}</span> : null}
+                  <span className="pushDeviceCount">{u.devices_count} устр.</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+
+          <h3>Лог отправки и отладка</h3>
+          <div className="pushLog" role="log" aria-live="polite">
+            {pushLog.length === 0 && <p className="fieldHint">Здесь появятся записи о загрузке списка и результатах APNS.</p>}
+            {pushLog.map((entry) => (
+              <pre key={entry.id} className={`pushLogLine pushLog-${entry.level}`}>
+                [{entry.ts}] {entry.message}
+                {entry.detail != null ? `\n${JSON.stringify(entry.detail, null, 2)}` : ''}
+              </pre>
+            ))}
+          </div>
+          <button type="button" className="secondaryMuted" onClick={() => setPushLog([])}>
+            Очистить лог
+          </button>
+        </section>
+      )}
+
+      {mainTab === 'generator' && step === 'form' && (
         <>
           <section className="card prefillCard">
             <h2>Предгенерация через LLM</h2>
@@ -924,7 +1143,7 @@ function App() {
         </>
       )}
 
-      {step === 'preview' && (
+      {mainTab === 'generator' && step === 'preview' && (
         <section className="previewGrid">
           <article className="card">
             <h2>Stories preview</h2>
@@ -939,7 +1158,7 @@ function App() {
         </section>
       )}
 
-      {status && <p className="status">{status}</p>}
+      {mainTab === 'generator' && status && <p className="status">{status}</p>}
     </main>
   )
 }

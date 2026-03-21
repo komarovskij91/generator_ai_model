@@ -43,6 +43,8 @@ Backend (`ai_chat_back`) must expose:
 - `POST /admin/content/session/{id}/kling/{prompt_id}/start`
 - `POST /admin/content/session/{id}/apply`
 - `POST /admin/models`
+- `GET /admin/push/candidates` — пользователи с зарегистрированными push-устройствами (для админки «Уведомления»)
+- `POST /admin/push/send-test` — тестовый APNS выбранным `user_ids` (`title`, `body`, опционально `model_id`)
 
 ## Prompt generation notes
 

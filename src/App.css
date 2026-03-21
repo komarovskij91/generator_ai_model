@@ -210,3 +210,164 @@ pre {
   object-fit: cover;
   border-radius: 8px;
 }
+
+.headerBrand {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.headerBrand h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.topTabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.topTab {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.topTab:hover {
+  background: #e2e8f0;
+}
+
+.topTab.active {
+  background: #0a84ff;
+  color: #fff;
+  border-color: #0a84ff;
+}
+
+.notificationsPanel h2,
+.notificationsPanel h3 {
+  margin: 0 0 4px;
+}
+
+.notificationsPanel h3 {
+  margin-top: 16px;
+  font-size: 1rem;
+}
+
+.primaryAction {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.secondaryMuted {
+  background: #64748b;
+  color: #fff;
+  border: none;
+  align-self: flex-start;
+}
+
+.pushListHeader {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.pushUserList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  max-height: 360px;
+  overflow: auto;
+  background: #fafafa;
+}
+
+.pushUserList li {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.pushUserList li:last-child {
+  border-bottom: none;
+}
+
+.pushUserRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.pushUserRow input {
+  flex-shrink: 0;
+}
+
+.pushUserId {
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.pushUserName {
+  color: #475569;
+  flex: 1;
+  min-width: 0;
+}
+
+.pushDeviceCount {
+  color: #64748b;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.pushLog {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 8px;
+  background: #0f172a;
+}
+
+.pushLogLine {
+  margin: 0 0 8px;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pushLogLine:last-child {
+  margin-bottom: 0;
+}
+
+.pushLog-info {
+  background: #1e3a5f;
+  color: #bfdbfe;
+}
+
+.pushLog-ok {
+  background: #14532d;
+  color: #bbf7d0;
+}
+
+.pushLog-warn {
+  background: #713f12;
+  color: #fde68a;
+}
+
+.pushLog-err {
+  background: #450a0a;
+  color: #fecaca;
+}
