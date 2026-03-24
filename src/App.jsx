@@ -194,6 +194,55 @@ const normalizePrefillPatch = (prefill) => {
   return patch
 }
 
+/** Обратное преобразование документа из Redis → локальная форма генератора. */
+const formFromRedisModel = (doc) => {
+  const sm = doc.story_media || {}
+  const nameI = doc.name_i18n || {}
+  const bioS = doc.bio_short_i18n || {}
+  const bioF = doc.bio_full_i18n || {}
+  const sp = doc.speaking_style_i18n || {}
+  const likes = doc.likes_i18n || {}
+  const likesRuArr = likes.ru
+  const likesEnArr = likes.en
+  return {
+    ...defaultForm,
+    slug: doc.slug || '',
+    nameRu: nameI.ru || doc.name || '',
+    nameEn: nameI.en || '',
+    gender: doc.gender || 'female',
+    age: doc.age != null ? Number(doc.age) : defaultForm.age,
+    targetAgeGroup: doc.target_age_group || defaultForm.targetAgeGroup,
+    archetypeKeys: Array.isArray(doc.archetype_keys) ? [...doc.archetype_keys] : [],
+    ethnicityKey: doc.ethnicity_key || 'european',
+    interestKeys: Array.isArray(doc.interest_keys) ? [...doc.interest_keys] : [],
+    bioShortRu: bioS.ru || doc.bio_short || '',
+    bioShortEn: bioS.en || '',
+    bioFullRu: bioF.ru || doc.bio_full || '',
+    bioFullEn: bioF.en || '',
+    speakingStyleRu: sp.ru || doc.speaking_style || '',
+    speakingStyleEn: sp.en || '',
+    likesRu: Array.isArray(likesRuArr) ? likesRuArr.join(', ') : '',
+    likesEn: Array.isArray(likesEnArr) ? likesEnArr.join(', ') : '',
+    allowedTopics: Array.isArray(doc.allowed_topics) ? doc.allowed_topics.join(', ') : '',
+    tabooTopics: Array.isArray(doc.taboo_topics) ? doc.taboo_topics.join(', ') : '',
+    systemPromptCore: doc.system_prompt_core || '',
+    avatarUrl: sm.avatar_url || doc.avatar_url || '',
+    avatarVideoUrl: sm.avatar_video_url || '',
+    coverUrl: sm.cover_url || '',
+    storyImageUrls: [...(sm.story_image_urls || [])],
+    storyVideoUrls: [...(sm.story_video_urls || [])],
+    chatImageUrls: [...(sm.chat_image_urls || [])],
+    chatVideoUrls: [...(sm.chat_video_urls || [])],
+    profileImageUrls: [...(sm.profile_image_urls || [])],
+    generatedMediaGroups: Array.isArray(doc.generated_media_groups) ? doc.generated_media_groups : [],
+    sortOrder: doc.sort_order != null ? Number(doc.sort_order) : defaultForm.sortOrder,
+    isActive: doc.is_active !== false,
+    schemaVersion: doc.schema_version != null ? Number(doc.schema_version) : defaultForm.schemaVersion,
+    createdBy: doc.created_by || defaultForm.createdBy,
+    source: doc.source || defaultForm.source,
+  }
+}
+
 function App() {
   const [adminLogin, setAdminLogin] = useState(localStorage.getItem('admin_login') || '')
   const [loginDraft, setLoginDraft] = useState(localStorage.getItem('admin_login') || '')
@@ -203,6 +252,9 @@ function App() {
   const [status, setStatus] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [mainTab, setMainTab] = useState('generator')
+  const [editingModelId, setEditingModelId] = useState(null)
+  const [editorModels, setEditorModels] = useState([])
+  const [editorSelectedId, setEditorSelectedId] = useState('')
   const [pushCandidates, setPushCandidates] = useState([])
   const [pushTitle, setPushTitle] = useState('Noloo')
   const [pushBody, setPushBody] = useState('Тестовое уведомление')
@@ -381,6 +433,50 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthed, mainTab])
 
+  const reloadEditorModels = async () => {
+    try {
+      const response = await adminFetch('/admin/models')
+      const data = await response.json()
+      setEditorModels(Array.isArray(data.items) ? data.items : [])
+    } catch (error) {
+      setStatus(`Список моделей: ${error.message}`)
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthed || mainTab !== 'editor') return
+    reloadEditorModels()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthed, mainTab])
+
+  const loadEditorModelIntoForm = async () => {
+    const id = editorSelectedId.trim()
+    if (!id) {
+      setStatus('Выберите модель в списке')
+      return
+    }
+    setIsLoading(true)
+    setStatus('')
+    try {
+      const response = await adminFetch(`/admin/models/${encodeURIComponent(id)}`)
+      const doc = await response.json()
+      setForm(formFromRedisModel(doc))
+      setEditingModelId(id)
+      setStatus(`Загружена модель ${id}. Можно править поля и медиа ниже.`)
+    } catch (error) {
+      setStatus(`Ошибка загрузки модели: ${error.message}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const clearEditorSession = () => {
+    setEditingModelId(null)
+    setEditorSelectedId('')
+    setForm({ ...defaultForm })
+    setStatus('Форма редактора сброшена')
+  }
+
   const login = async () => {
     setIsLoading(true)
     setStatus('')
@@ -438,6 +534,7 @@ function App() {
       if (mediaKind === 'story_image') setField('storyImageUrls', [...form.storyImageUrls, ...urls])
       if (mediaKind === 'story_video') setField('storyVideoUrls', [...form.storyVideoUrls, ...urls])
       if (mediaKind === 'chat_image') setField('chatImageUrls', [...form.chatImageUrls, ...urls])
+      if (mediaKind === 'profile_image') setField('profileImageUrls', [...form.profileImageUrls, ...urls])
       if (mediaKind === 'chat_video') setField('chatVideoUrls', [...form.chatVideoUrls, ...urls])
     } finally {
       setIsLoading(false)
@@ -454,6 +551,8 @@ function App() {
       setField('chatImageUrls', form.chatImageUrls.filter((item) => item !== url))
     } else if (mediaKind === 'chat_video') {
       setField('chatVideoUrls', form.chatVideoUrls.filter((item) => item !== url))
+    } else if (mediaKind === 'profile_image') {
+      setField('profileImageUrls', form.profileImageUrls.filter((item) => item !== url))
     }
   }
 
@@ -715,24 +814,36 @@ function App() {
     }
     setIsLoading(true)
     try {
-      await adminFetch('/admin/models', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model_data: previewModel }),
-      })
-      setStatus('Модель создана')
-      setForm(defaultForm)
-      setPrefillImageUrl('')
-      setPrefillBrief('')
-      setPastedContentFiles([])
-      setContentSessionId('')
-      setContentPromptGroups([])
-      setContentSelection({})
-      localStorage.removeItem(CONTENT_DRAFT_KEY)
-      localStorage.removeItem(FORM_DRAFT_KEY)
-      setStep('form')
+      if (editingModelId) {
+        await adminFetch(`/admin/models/${encodeURIComponent(editingModelId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model_data: previewModel }),
+        })
+        setStatus(`Модель ${editingModelId} сохранена в Redis`)
+      } else {
+        await adminFetch('/admin/models', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model_data: previewModel }),
+        })
+        setStatus('Модель создана')
+        setForm(defaultForm)
+        setPrefillImageUrl('')
+        setPrefillBrief('')
+        setPastedContentFiles([])
+        setContentSessionId('')
+        setContentPromptGroups([])
+        setContentSelection({})
+        localStorage.removeItem(CONTENT_DRAFT_KEY)
+        localStorage.removeItem(FORM_DRAFT_KEY)
+        setStep('form')
+      }
+      if (mainTab === 'editor') {
+        reloadEditorModels()
+      }
     } catch (error) {
-      setStatus(`Ошибка создания: ${error.message}`)
+      setStatus(editingModelId ? `Ошибка сохранения: ${error.message}` : `Ошибка создания: ${error.message}`)
     } finally {
       setIsLoading(false)
     }
@@ -813,14 +924,23 @@ function App() {
             >
               Уведомления
             </button>
+            <button
+              type="button"
+              className={mainTab === 'editor' ? 'topTab active' : 'topTab'}
+              onClick={() => setMainTab('editor')}
+            >
+              Редактор моделей
+            </button>
           </nav>
         </div>
         <div className="headerActions">
-          {mainTab === 'generator' && (
+          {(mainTab === 'generator' || mainTab === 'editor') && (
             <>
               <button type="button" onClick={() => setStep('form')}>Форма</button>
               <button type="button" onClick={() => setStep('preview')}>Preview</button>
-              <button type="button" onClick={resetAllDraftData}>Новая генерация</button>
+              {mainTab === 'generator' && (
+                <button type="button" onClick={resetAllDraftData}>Новая генерация</button>
+              )}
             </>
           )}
           {mainTab === 'notifications' && (
@@ -944,6 +1064,47 @@ function App() {
         </section>
       )}
 
+      {mainTab === 'editor' && step === 'form' && (
+        <section className="card">
+          <h2>Редактор существующей модели</h2>
+          <p className="fieldHint">
+            Выберите модель, нажмите «Загрузить в форму» — откроются те же поля, что в генераторе (описания, сторис-фото,
+            видео и т.д.). Можно удалять пункты из списков URL кнопкой × и добавлять новые файлы — они уйдут в R2 как при
+            создании.
+          </p>
+          <label htmlFor="editor-model-select">Модель</label>
+          <select
+            id="editor-model-select"
+            value={editorSelectedId}
+            onChange={(e) => setEditorSelectedId(e.target.value)}
+          >
+            <option value="">— Выберите модель —</option>
+            {editorModels.map((m) => (
+              <option key={m.id} value={m.id}>
+                {(m.name && String(m.name).trim()) || m.id} · {m.id}
+                {!m.is_active ? ' (выкл.)' : ''}
+              </option>
+            ))}
+          </select>
+          <div className="miniRow" style={{ marginTop: 10 }}>
+            <button type="button" disabled={isLoading || !editorSelectedId} onClick={loadEditorModelIntoForm}>
+              Загрузить в форму
+            </button>
+            <button type="button" disabled={isLoading} onClick={reloadEditorModels}>
+              Обновить список
+            </button>
+            <button type="button" onClick={clearEditorSession}>
+              Сбросить форму
+            </button>
+          </div>
+          {editingModelId ? (
+            <p className="status" style={{ marginTop: 12 }}>
+              Редактируется <code>{editingModelId}</code> — внизу вкладки заполните блоки «База», «Тексты», «Media». Сохранение: кнопка в Preview или добавьте через форму (перейдите в Preview).
+            </p>
+          ) : null}
+        </section>
+      )}
+
       {mainTab === 'generator' && step === 'form' && (
         <>
           <section className="card prefillCard">
@@ -1036,7 +1197,10 @@ function App() {
               Применить (R2 + Payload)
             </button>
           </section>
+        </>
+      )}
 
+      {(mainTab === 'generator' || mainTab === 'editor') && step === 'form' && (
           <section className="grid">
             <article className="card">
               <h2>База (обязательно)</h2>
@@ -1068,6 +1232,20 @@ function App() {
               <label>Главная инструкция (`system_prompt_core`) *</label>
               <textarea value={form.systemPromptCore} onChange={(e) => setField('systemPromptCore', e.target.value)} />
               <small className="fieldExample">Пример: Отвечай тепло, уверенно, с легким флиртом и соблюдай границы.</small>
+              <label>Порядок в каталоге (`sort_order`)</label>
+              <input
+                type="number"
+                value={form.sortOrder}
+                onChange={(e) => setField('sortOrder', Number(e.target.value) || 0)}
+              />
+              <label className="chip" style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={form.isActive}
+                  onChange={(e) => setField('isActive', e.target.checked)}
+                />
+                Модель активна (`is_active`) — участвует в списке <code>models:active</code>
+              </label>
               <button disabled={isLoading} onClick={generateEnglish}>Сгенерировать EN из RU</button>
             </article>
 
@@ -1179,9 +1357,11 @@ function App() {
       </div>
               ))}
               <label>Фото для профиля (`story_media.profile_image_urls[]`)</label>
+              <input type="file" accept="image/*" multiple onChange={(e) => uploadManyMedia(Array.from(e.target.files || []), 'profile_image')} />
               {form.profileImageUrls.map((url) => (
                 <div key={url} className="miniRow">
                   <a href={url} target="_blank" rel="noreferrer">{url.slice(0, 40)}...</a>
+                  <button type="button" onClick={() => removeStoryMedia(url, 'profile_image')}>x</button>
                 </div>
               ))}
               <label>Видео для чата (`story_media.chat_video_urls[]`, {'<='}30MB)</label>
@@ -1195,10 +1375,9 @@ function App() {
               <small className="fieldHint">Эти фото модель будет отправлять в чате при запросе пользователя.</small>
             </article>
           </section>
-        </>
       )}
 
-      {mainTab === 'generator' && step === 'preview' && (
+      {(mainTab === 'generator' || mainTab === 'editor') && step === 'preview' && (
         <section className="previewGrid">
           <article className="card">
             <h2>Stories preview</h2>
@@ -1208,12 +1387,14 @@ function App() {
           <article className="card">
             <h2>Payload</h2>
             <pre>{JSON.stringify(previewModel, null, 2)}</pre>
-            <button disabled={isLoading} onClick={createModel}>Создать модель</button>
+            <button disabled={isLoading} onClick={createModel}>
+              {editingModelId ? 'Сохранить изменения' : 'Создать модель'}
+            </button>
           </article>
         </section>
       )}
 
-      {mainTab === 'generator' && status && <p className="status">{status}</p>}
+      {(mainTab === 'generator' || mainTab === 'editor') && status && <p className="status">{status}</p>}
     </main>
   )
 }
