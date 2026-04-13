@@ -22,7 +22,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
 
   const draftValue = (draft, key) => {
     if (draftEdits[draft.id] && key in draftEdits[draft.id]) return draftEdits[draft.id][key]
-    return draft[key] || ''
+    return draft[key] ?? ''
   }
 
   const refreshAll = async (silent = false) => {
@@ -128,6 +128,8 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
         selected_candidate_id: edit.selected_candidate_id ?? draft.selected_candidate_id ?? null,
         caption_ru: edit.caption_ru ?? draft.caption_ru ?? '',
         caption_en: edit.caption_en ?? draft.caption_en ?? '',
+        likes_count: edit.likes_count ?? draft.likes_count ?? 0,
+        dislikes_count: edit.dislikes_count ?? draft.dislikes_count ?? 0,
       })
       await refreshAll(true)
       setStatus('Правки черновика сохранены')
@@ -147,6 +149,8 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
           selected_candidate_id: edit.selected_candidate_id ?? null,
           caption_ru: edit.caption_ru ?? '',
           caption_en: edit.caption_en ?? '',
+          likes_count: edit.likes_count ?? 0,
+          dislikes_count: edit.dislikes_count ?? 0,
         })
       }
       await adminFetch(`/admin/feed/drafts/${encodeURIComponent(draftId)}/${action}`, { method: 'POST' })
@@ -167,6 +171,8 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
         selected_candidate_id: edit.selected_candidate_id ?? draft.selected_candidate_id ?? null,
         caption_ru: edit.caption_ru ?? draft.caption_ru ?? '',
         caption_en: edit.caption_en ?? draft.caption_en ?? '',
+        likes_count: edit.likes_count ?? draft.likes_count ?? 0,
+        dislikes_count: edit.dislikes_count ?? draft.dislikes_count ?? 0,
       })
       await adminFetch(`/admin/feed/drafts/${encodeURIComponent(draft.id)}/save`, { method: 'POST' })
       await refreshAll(true)
@@ -324,6 +330,36 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                         setDraftEdits((prev) => ({
                           ...prev,
                           [draft.id]: { ...(prev[draft.id] || {}), caption_en: e.target.value },
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="miniRow">
+                  <div className="card" style={{ minWidth: 160 }}>
+                    <label>Стартовые лайки</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={draftValue(draft, 'likes_count')}
+                      onChange={(e) =>
+                        setDraftEdits((prev) => ({
+                          ...prev,
+                          [draft.id]: { ...(prev[draft.id] || {}), likes_count: Number(e.target.value || 0) },
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="card" style={{ minWidth: 160 }}>
+                    <label>Стартовые дизлайки</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={draftValue(draft, 'dislikes_count')}
+                      onChange={(e) =>
+                        setDraftEdits((prev) => ({
+                          ...prev,
+                          [draft.id]: { ...(prev[draft.id] || {}), dislikes_count: Number(e.target.value || 0) },
                         }))
                       }
                     />
