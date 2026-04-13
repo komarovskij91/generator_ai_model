@@ -14,6 +14,8 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
   const [generateCount, setGenerateCount] = useState(3)
+  const [showReadyPosts, setShowReadyPosts] = useState(false)
+  const [showPublishedPosts, setShowPublishedPosts] = useState(false)
 
   const readyPosts = useMemo(() => sortPosts(posts, 'ready'), [posts])
   const publishedPosts = useMemo(() => sortPosts(posts, 'published'), [posts])
@@ -194,19 +196,6 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     }
   }
 
-  const publishPost = async (postId) => {
-    setBusy(true)
-    try {
-      await adminFetch(`/admin/feed/posts/${encodeURIComponent(postId)}/publish`, { method: 'POST' })
-      await refreshAll(true)
-      setStatus('Пост опубликован')
-    } catch (error) {
-      setStatus(`Публикация: ${error.message}`)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const deletePost = async (postId) => {
     setBusy(true)
     try {
@@ -365,48 +354,72 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
       </section>
 
       <section className="card">
-        <h2>Подготовленные посты</h2>
-        <div className="feedPreparedList">
-          {readyPosts.map((post) => (
-            <article key={post.id} className="feedPreparedCard">
-              <img src={post.image_url} alt={post.id} />
-              <div className="feedPreparedMeta">
-                <strong>{post.model_name}</strong>
-                <span>{post.status_ru}</span>
-                <p>{post.caption_ru}</p>
-              </div>
-              <div className="miniRow feedActions">
-                <button type="button" disabled={busy} onClick={() => publishPost(post.id)}>
-                  Опубликовать
-                </button>
-                <button type="button" className="secondaryMuted" disabled={busy} onClick={() => deletePost(post.id)}>
-                  Удалить
-                </button>
-              </div>
-            </article>
-          ))}
-          {readyPosts.length === 0 ? <p className="fieldHint">Подготовленных постов пока нет.</p> : null}
+        <div className="pushListHeader">
+          <div className="feedStat">
+            <strong>{readyPosts.length}</strong>
+            <span>Готово к автопубликации</span>
+          </div>
+          <button type="button" disabled={busy || readyPosts.length === 0} onClick={() => setShowReadyPosts((prev) => !prev)}>
+            {showReadyPosts ? 'Скрыть посты' : 'Показать посты'}
+          </button>
         </div>
+        {showReadyPosts && (
+          <div className="feedPreparedList">
+            {readyPosts.map((post) => (
+              <article key={post.id} className="feedPreparedCard">
+                <img src={post.image_url} alt={post.id} />
+                <div className="feedPreparedMeta">
+                  <strong>{post.model_name}</strong>
+                  <span>{post.status_ru}</span>
+                  <p>{post.caption_ru}</p>
+                </div>
+                <div className="miniRow feedActions">
+                  <button type="button" className="secondaryMuted" disabled={busy} onClick={() => deletePost(post.id)}>
+                    Удалить
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="card">
-        <h2>Опубликованные</h2>
-        <div className="feedPreparedList">
-          {publishedPosts.map((post) => (
-            <article key={post.id} className="feedPreparedCard">
-              <img src={post.image_url} alt={post.id} />
-              <div className="feedPreparedMeta">
-                <strong>{post.model_name}</strong>
-                <span>
-                  {post.status_ru}
-                  {post.published_at ? ` · ${new Date(post.published_at * 1000).toLocaleString('ru-RU')}` : ''}
-                </span>
-                <p>{post.caption_ru}</p>
-              </div>
-            </article>
-          ))}
-          {publishedPosts.length === 0 ? <p className="fieldHint">Публикаций пока нет.</p> : null}
+        <div className="pushListHeader">
+          <div className="feedStat">
+            <strong>{publishedPosts.length}</strong>
+            <span>Уже опубликовано</span>
+          </div>
+          <button
+            type="button"
+            disabled={busy || publishedPosts.length === 0}
+            onClick={() => setShowPublishedPosts((prev) => !prev)}
+          >
+            {showPublishedPosts ? 'Скрыть посты' : 'Показать посты'}
+          </button>
         </div>
+        {showPublishedPosts && (
+          <div className="feedPreparedList">
+            {publishedPosts.map((post) => (
+              <article key={post.id} className="feedPreparedCard">
+                <img src={post.image_url} alt={post.id} />
+                <div className="feedPreparedMeta">
+                  <strong>{post.model_name}</strong>
+                  <span>
+                    {post.status_ru}
+                    {post.published_at ? ` · ${new Date(post.published_at * 1000).toLocaleString('ru-RU')}` : ''}
+                  </span>
+                  <p>{post.caption_ru}</p>
+                </div>
+                <div className="miniRow feedActions">
+                  <button type="button" className="secondaryMuted" disabled={busy} onClick={() => deletePost(post.id)}>
+                    Удалить
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       {status ? <p className="status">{status}</p> : null}
