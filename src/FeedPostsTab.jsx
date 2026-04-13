@@ -7,7 +7,6 @@ function sortPosts(items, status) {
 }
 
 export default function FeedPostsTab({ adminFetch, isActive }) {
-  const [sourcePhotos, setSourcePhotos] = useState([])
   const [sourceStats, setSourceStats] = useState({ total_count: 0, available_count: 0, used_count: 0 })
   const [drafts, setDrafts] = useState([])
   const [posts, setPosts] = useState([])
@@ -37,7 +36,6 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
         draftRes.json(),
         postRes.json(),
       ])
-      setSourcePhotos(Array.isArray(sourceData.items) ? sourceData.items : [])
       setSourceStats({
         total_count: Number(sourceData.total_count || 0),
         available_count: Number(sourceData.available_count || 0),
@@ -92,19 +90,6 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     if (!files.length) return
     event.preventDefault()
     await uploadFiles(files)
-  }
-
-  const deleteSourcePhoto = async (photoId) => {
-    setBusy(true)
-    try {
-      await adminFetch(`/admin/feed/source-photos/${encodeURIComponent(photoId)}`, { method: 'DELETE' })
-      await refreshAll(true)
-      setStatus('Фото удалено из базы')
-    } catch (error) {
-      setStatus(`Удаление фото: ${error.message}`)
-    } finally {
-      setBusy(false)
-    }
   }
 
   const queueDrafts = async () => {
@@ -249,20 +234,6 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
           Вставьте изображения сюда через Cmd/Ctrl+V или выберите файлы ниже.
         </div>
         <input type="file" accept="image/*" multiple onChange={(e) => uploadFiles(e.target.files)} />
-        <div className="feedThumbGrid">
-          {sourcePhotos.map((photo) => (
-            <article key={photo.id} className="feedThumbCard">
-              <img src={photo.image_url} alt={photo.id} />
-              <div className="feedThumbMeta">
-                <strong>{photo.status_ru}</strong>
-                <small>{photo.prompt}</small>
-              </div>
-              <button type="button" className="secondaryMuted" disabled={busy} onClick={() => deleteSourcePhoto(photo.id)}>
-                Удалить
-              </button>
-            </article>
-          ))}
-        </div>
       </section>
 
       <section className="card">
