@@ -176,6 +176,24 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     }
   }
 
+  const deleteDraft = async (draftId) => {
+    setBusy(true)
+    try {
+      await adminFetch(`/admin/feed/drafts/${encodeURIComponent(draftId)}`, { method: 'DELETE' })
+      setDraftEdits((prev) => {
+        const next = { ...prev }
+        delete next[draftId]
+        return next
+      })
+      await refreshAll(true)
+      setStatus('Черновик удалён')
+    } catch (error) {
+      setStatus(`Удаление черновика: ${error.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const publishPost = async (postId) => {
     setBusy(true)
     try {
@@ -334,6 +352,9 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                   </button>
                   <button type="button" disabled={busy || draft.saved_post_id} onClick={() => saveDraftToPost(draft)}>
                     {draft.saved_post_id ? 'Уже сохранён' : 'Сохранить пост'}
+                  </button>
+                  <button type="button" className="secondaryMuted" disabled={busy} onClick={() => deleteDraft(draft.id)}>
+                    Удалить
                   </button>
                 </div>
               </article>
