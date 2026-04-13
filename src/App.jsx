@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
+import FeedPostsTab from './FeedPostsTab'
 
 const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL || 'https://web-production-c51d.up.railway.app'
@@ -931,6 +932,13 @@ function App() {
             >
               Редактор моделей
             </button>
+            <button
+              type="button"
+              className={mainTab === 'posts' ? 'topTab active' : 'topTab'}
+              onClick={() => setMainTab('posts')}
+            >
+              Лента постов
+            </button>
           </nav>
         </div>
         <div className="headerActions">
@@ -1063,6 +1071,8 @@ function App() {
           </button>
         </section>
       )}
+
+      {mainTab === 'posts' && <FeedPostsTab adminFetch={adminFetch} isActive={mainTab === 'posts'} />}
 
       {mainTab === 'editor' && step === 'form' && (
         <section className="card">

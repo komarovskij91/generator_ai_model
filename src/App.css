@@ -371,3 +371,171 @@ pre {
   background: #450a0a;
   color: #fecaca;
 }
+
+.feedPostsPage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.feedStatsRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.feedStat {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.feedStat strong {
+  font-size: 1.35rem;
+}
+
+.feedStat span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.feedPasteZone {
+  min-height: 74px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.feedThumbGrid,
+.feedPreparedList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.feedThumbCard,
+.feedPreparedCard,
+.feedDraftCard {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.feedThumbCard img,
+.feedPreparedCard img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.feedThumbMeta,
+.feedPreparedMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feedThumbMeta small,
+.feedPreparedMeta span {
+  color: #64748b;
+}
+
+.feedDraftList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.feedDraftHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.feedDraftHeader h3 {
+  margin: 0;
+}
+
+.feedDraftTop {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.feedSourcePreview {
+  width: 140px;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.feedCandidateGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.feedCandidate {
+  background: #f8fafc;
+  color: #0f172a;
+  border: 1px solid #dbe3f0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+}
+
+.feedCandidate img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.feedCandidate span {
+  font-size: 12px;
+}
+
+.feedCandidate.active {
+  border-color: #0a84ff;
+  box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.16);
+}
+
+.feedActions {
+  flex-wrap: wrap;
+}
+
+.feedMiniAvatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.feedError {
+  margin: 0;
+  color: #b91c1c;
+  max-width: 420px;
+}
+
+@media (max-width: 720px) {
+  .feedDraftTop {
+    grid-template-columns: 1fr;
+  }
+
+  .feedSourcePreview {
+    width: 100%;
+  }
+}
