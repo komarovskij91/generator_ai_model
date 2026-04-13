@@ -202,6 +202,19 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     }
   }
 
+  const publishPost = async (postId) => {
+    setBusy(true)
+    try {
+      await adminFetch(`/admin/feed/posts/${encodeURIComponent(postId)}/publish`, { method: 'POST' })
+      await refreshAll(true)
+      setStatus('Пост опубликован')
+    } catch (error) {
+      setStatus(`Публикация: ${error.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const deletePost = async (postId) => {
     setBusy(true)
     try {
@@ -410,6 +423,9 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                   <p>{post.caption_ru}</p>
                 </div>
                 <div className="miniRow feedActions">
+                  <button type="button" disabled={busy} onClick={() => publishPost(post.id)}>
+                    Опубликовать
+                  </button>
                   <button type="button" className="secondaryMuted" disabled={busy} onClick={() => deletePost(post.id)}>
                     Удалить
                   </button>
