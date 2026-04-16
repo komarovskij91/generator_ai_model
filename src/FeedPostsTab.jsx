@@ -14,6 +14,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
   const [generateCount, setGenerateCount] = useState(3)
+  const [seedLikesCount, setSeedLikesCount] = useState(0)
   const [showReadyPosts, setShowReadyPosts] = useState(false)
   const [showPublishedPosts, setShowPublishedPosts] = useState(false)
 
@@ -101,7 +102,10 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
       await adminFetch('/admin/feed/drafts/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count: Number(generateCount || 1) }),
+        body: JSON.stringify({
+          count: Number(generateCount || 1),
+          seed_likes_count: Number(seedLikesCount || 0),
+        }),
       })
       await refreshAll(true)
       setStatus('Генерация поставлена в очередь')
@@ -267,6 +271,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
           <div>
             <h2>Черновики постов</h2>
             <p className="fieldHint">Каждый черновик проходит очередь последовательно: картинки, затем тексты. Состояние сохраняется и переживает обновление страницы.</p>
+            <p className="fieldHint">Можно задать базовые лайки перед генерацией: backend выставит каждому черновику случайное значение около этой цифры (+/-20%), а дизлайки автоматически поставит как 6% от лайков.</p>
           </div>
           <div className="miniRow">
             <input
@@ -276,6 +281,16 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
               value={generateCount}
               onChange={(e) => setGenerateCount(e.target.value)}
               style={{ width: 96 }}
+            />
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={seedLikesCount}
+              onChange={(e) => setSeedLikesCount(e.target.value)}
+              style={{ width: 126 }}
+              placeholder="Лайки"
+              title="Базовые лайки"
             />
             <button type="button" disabled={busy || sourceStats.available_count === 0} onClick={queueDrafts}>
               Создать черновики
@@ -420,7 +435,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                 <div className="feedPreparedMeta">
                   <strong>{post.model_name}</strong>
                   <span>{post.status_ru}</span>
-                  <p>{post.caption_ru}</p>
+                  {post.caption_ru ? <p>{post.caption_ru}</p> : null}
                 </div>
                 <div className="miniRow feedActions">
                   <button type="button" disabled={busy} onClick={() => publishPost(post.id)}>
@@ -461,7 +476,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                     {post.status_ru}
                     {post.published_at ? ` · ${new Date(post.published_at * 1000).toLocaleString('ru-RU')}` : ''}
                   </span>
-                  <p>{post.caption_ru}</p>
+                  {post.caption_ru ? <p>{post.caption_ru}</p> : null}
                 </div>
                 <div className="miniRow feedActions">
                   <button type="button" className="secondaryMuted" disabled={busy} onClick={() => deletePost(post.id)}>
