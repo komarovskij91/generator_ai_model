@@ -1,19 +1,43 @@
 # generator_ai_model
 
-Web admin frontend for creating AI model profiles used by `ai_chat_back`.
+Web admin frontend for the Noloo stack. It is no longer only a model creator: it now covers model generation, push testing, and the feed-post preparation workflow used by the iOS app.
 
 ## Features
 
-- Login gate using admin login (`Komar3000` by default on backend).
-- Full model form with RU/EN fields and stable filter keys.
-- Media upload to backend (`/admin/media/upload`) with R2 storage.
-- Two-step flow: form -> preview -> confirm create.
-- EN generation from RU fields (`/admin/generate-en`).
-- Prefill by image/brief (`/admin/prefill-model`) with gender-aware defaults.
-- Content session flow for prompt generation and media apply:
-  - create session -> generate prompts by pasted images
-  - start Kling per prompt
-  - apply selected generated media into final payload
+### Models
+
+- admin login gate
+- full model form with RU/EN fields and stable filter keys
+- media upload to backend with R2 storage
+- two-step flow: form -> preview -> confirm create
+- EN generation from RU fields
+- prefill by image/brief with gender-aware defaults
+
+### Content session / prompt generation
+
+- create content session from pasted images
+- generate prompts per image
+- start Kling generation per prompt
+- apply selected generated media back into the final model payload
+
+### Notifications
+
+- dedicated admin tab for test push sending
+- loads push candidates from backend
+- can send test APNS to selected users
+- supports optional model binding for communication-style push previews
+
+### Feed posts
+
+- upload and manage source photos
+- generate feed drafts from source photos
+- edit RU/EN/DE/FR/PT/ES captions
+- set seeded likes/dislikes
+- regenerate images or text for a draft
+- save a draft as a prepared post
+- publish a prepared post immediately
+- delete drafts or posts
+- view prepared and published post counts
 
 ## Run
 
@@ -22,15 +46,24 @@ npm install
 npm run dev
 ```
 
+Useful commands:
+
+```bash
+npm run build
+npm run lint
+```
+
 Optional frontend env:
 
 ```bash
 VITE_BACKEND_BASE_URL=https://web-production-c51d.up.railway.app
 ```
 
-## Backend requirements
+## Backend Requirements
 
 Backend (`ai_chat_back`) must expose:
+
+### Models / generator
 
 - `POST /admin/login`
 - `POST /admin/media/upload`
@@ -43,15 +76,49 @@ Backend (`ai_chat_back`) must expose:
 - `POST /admin/content/session/{id}/kling/{prompt_id}/start`
 - `POST /admin/content/session/{id}/apply`
 - `POST /admin/models`
-- `GET /admin/push/candidates` — пользователи с зарегистрированными push-устройствами (для админки «Уведомления»)
-- `POST /admin/push/send-test` — тестовый APNS выбранным `user_ids` (`title`, `body`, опционально `model_id`)
-- Публичный `GET /models/active` — список моделей для выпадающего списка на вкладке «Уведомления»
 
-## Rich-push / аватар в уведомлении (iOS)
+### Notifications
 
-Как сделать превью «как в Telegram» (Notification Service Extension vs Communication Notifications) и какие ключи ждать в payload — см. [docs/IOS_TELEGRAM_STYLE_PUSH.md](docs/IOS_TELEGRAM_STYLE_PUSH.md).
+- `GET /admin/push/candidates`
+- `POST /admin/push/send-test`
+- public `GET /models/active` for model selection in notifications UI
 
-## Prompt generation notes
+### Feed posts
+
+- `GET /admin/feed/source-photos`
+- `POST /admin/feed/source-photos/upload`
+- `DELETE /admin/feed/source-photos/{photo_id}`
+- `POST /admin/feed/drafts/generate`
+- `GET /admin/feed/drafts`
+- `PATCH /admin/feed/drafts/{draft_id}`
+- `POST /admin/feed/drafts/{draft_id}/regenerate-images`
+- `POST /admin/feed/drafts/{draft_id}/regenerate-text`
+- `POST /admin/feed/drafts/{draft_id}/save`
+- `DELETE /admin/feed/drafts/{draft_id}`
+- `GET /admin/feed/posts`
+- `POST /admin/feed/posts/{post_id}/publish`
+- `DELETE /admin/feed/posts/{post_id}`
+
+## Current Feed Workflow
+
+1. Upload source photos.
+2. Backend generates draft prompts and 3 image candidates per draft.
+3. Admin edits/selects image and localized captions; the long source prompt is kept in backend data but not shown in the draft card UI.
+4. Draft is saved into the prepared queue.
+5. Post can be published manually from admin or later by the worker.
+
+Current baseline:
+
+- generation is female-only
+- captions are short, first-person, and localized for all app UI languages: RU/EN/DE/FR/PT/ES
+- hashtags are not required
+- prepared posts are the source for auto-publication
+
+## Rich Push / Model Avatar In iOS Notifications
+
+Current push behavior and payload requirements are documented in [docs/IOS_TELEGRAM_STYLE_PUSH.md](docs/IOS_TELEGRAM_STYLE_PUSH.md).
+
+## Prompt Generation Notes
 
 - Prompt generation is image-conditioned and runs per image to reduce cross-image mismatch.
 - Backend prompt instructions require:

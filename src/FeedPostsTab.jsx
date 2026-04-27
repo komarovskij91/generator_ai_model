@@ -1,10 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 function sortPosts(items, status) {
   return (items || [])
     .filter((item) => item.status === status)
     .sort((a, b) => (b.published_at || b.updated_at || 0) - (a.published_at || a.updated_at || 0))
 }
+
+const captionFields = [
+  { key: 'caption_ru', label: 'Текст RU' },
+  { key: 'caption_en', label: 'Text EN' },
+  { key: 'caption_de', label: 'Text DE' },
+  { key: 'caption_fr', label: 'Text FR' },
+  { key: 'caption_pt', label: 'Text PT' },
+  { key: 'caption_es', label: 'Text ES' },
+]
 
 export default function FeedPostsTab({ adminFetch, isActive }) {
   const [sourceStats, setSourceStats] = useState({ total_count: 0, available_count: 0, used_count: 0 })
@@ -26,7 +35,14 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     return draft[key] ?? ''
   }
 
-  const refreshAll = async (silent = false) => {
+  const draftPatchFromEdit = (draft, edit = {}) => ({
+    selected_candidate_id: edit.selected_candidate_id ?? draft.selected_candidate_id ?? null,
+    ...Object.fromEntries(captionFields.map(({ key }) => [key, edit[key] ?? draft[key] ?? ''])),
+    likes_count: edit.likes_count ?? draft.likes_count ?? 0,
+    dislikes_count: edit.dislikes_count ?? draft.dislikes_count ?? 0,
+  })
+
+  const refreshAll = useCallback(async (silent = false) => {
     if (!silent) setBusy(true)
     try {
       const [sourceRes, draftRes, postRes] = await Promise.all([
@@ -52,7 +68,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     } finally {
       if (!silent) setBusy(false)
     }
-  }
+  }, [adminFetch])
 
   useEffect(() => {
     if (!isActive) return undefined
@@ -61,7 +77,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
       refreshAll(true)
     }, 8000)
     return () => window.clearInterval(timer)
-  }, [isActive])
+  }, [isActive, refreshAll])
 
   const uploadFiles = async (files) => {
     const picked = Array.from(files || []).filter(Boolean)
@@ -128,13 +144,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     setBusy(true)
     try {
       const edit = draftEdits[draft.id] || {}
-      await patchDraft(draft.id, {
-        selected_candidate_id: edit.selected_candidate_id ?? draft.selected_candidate_id ?? null,
-        caption_ru: edit.caption_ru ?? draft.caption_ru ?? '',
-        caption_en: edit.caption_en ?? draft.caption_en ?? '',
-        likes_count: edit.likes_count ?? draft.likes_count ?? 0,
-        dislikes_count: edit.dislikes_count ?? draft.dislikes_count ?? 0,
-      })
+      await patchDraft(draft.id, draftPatchFromEdit(draft, edit))
       await refreshAll(true)
       setStatus('Правки черновика сохранены')
     } catch (error) {
@@ -149,13 +159,8 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     try {
       const edit = draftEdits[draftId]
       if (edit) {
-        await patchDraft(draftId, {
-          selected_candidate_id: edit.selected_candidate_id ?? null,
-          caption_ru: edit.caption_ru ?? '',
-          caption_en: edit.caption_en ?? '',
-          likes_count: edit.likes_count ?? 0,
-          dislikes_count: edit.dislikes_count ?? 0,
-        })
+        const draft = drafts.find((item) => item.id === draftId) || {}
+        await patchDraft(draftId, draftPatchFromEdit(draft, edit))
       }
       await adminFetch(`/admin/feed/drafts/${encodeURIComponent(draftId)}/${action}`, { method: 'POST' })
       await refreshAll(true)
@@ -171,13 +176,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     setBusy(true)
     try {
       const edit = draftEdits[draft.id] || {}
-      await patchDraft(draft.id, {
-        selected_candidate_id: edit.selected_candidate_id ?? draft.selected_candidate_id ?? null,
-        caption_ru: edit.caption_ru ?? draft.caption_ru ?? '',
-        caption_en: edit.caption_en ?? draft.caption_en ?? '',
-        likes_count: edit.likes_count ?? draft.likes_count ?? 0,
-        dislikes_count: edit.dislikes_count ?? draft.dislikes_count ?? 0,
-      })
+      await patchDraft(draft.id, draftPatchFromEdit(draft, edit))
       await adminFetch(`/admin/feed/drafts/${encodeURIComponent(draft.id)}/save`, { method: 'POST' })
       await refreshAll(true)
       setStatus('Пост сохранён в подготовленные')
@@ -314,10 +313,6 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                 </div>
                 <div className="feedDraftTop">
                   <img className="feedSourcePreview" src={draft.source_photo_url} alt={draft.source_photo_id} />
-                  <div>
-                    <p className="fieldHint">Промт от source photo</p>
-                    <p>{draft.prompt}</p>
-                  </div>
                 </div>
                 <div className="feedCandidateGrid">
                   {draft.image_candidates.map((candidate) => (
@@ -338,30 +333,20 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                   ))}
                 </div>
                 <div className="grid">
-                  <div className="card">
-                    <label>Текст RU</label>
-                    <textarea
-                      value={draftValue(draft, 'caption_ru')}
-                      onChange={(e) =>
-                        setDraftEdits((prev) => ({
-                          ...prev,
-                          [draft.id]: { ...(prev[draft.id] || {}), caption_ru: e.target.value },
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="card">
-                    <label>Text EN</label>
-                    <textarea
-                      value={draftValue(draft, 'caption_en')}
-                      onChange={(e) =>
-                        setDraftEdits((prev) => ({
-                          ...prev,
-                          [draft.id]: { ...(prev[draft.id] || {}), caption_en: e.target.value },
-                        }))
-                      }
-                    />
-                  </div>
+                  {captionFields.map(({ key, label }) => (
+                    <div className="card" key={key}>
+                      <label>{label}</label>
+                      <textarea
+                        value={draftValue(draft, key)}
+                        onChange={(e) =>
+                          setDraftEdits((prev) => ({
+                            ...prev,
+                            [draft.id]: { ...(prev[draft.id] || {}), [key]: e.target.value },
+                          }))
+                        }
+                      />
+                    </div>
+                  ))}
                 </div>
                 <div className="miniRow">
                   <div className="card" style={{ minWidth: 160 }}>
