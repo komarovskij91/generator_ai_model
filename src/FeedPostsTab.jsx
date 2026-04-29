@@ -231,20 +231,28 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     }
   }
 
+  const setLocalPostFlag = (postId, key, checked) => {
+    setPosts((prev) =>
+      (prev || []).map((post) =>
+        post.id === postId ? { ...post, [key]: checked } : post
+      )
+    )
+  }
+
   const updatePostFlag = async (post, key, checked) => {
-    setBusy(true)
+    const previous = Boolean(post[key])
+    setLocalPostFlag(post.id, key, checked)
+    setStatus('Сохраняю флаг поста…')
     try {
       await adminFetch(`/admin/feed/posts/${encodeURIComponent(post.id)}/flags`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [key]: checked }),
       })
-      await refreshAll(true)
       setStatus('Флаг поста сохранён')
     } catch (error) {
+      setLocalPostFlag(post.id, key, previous)
       setStatus(`Флаг поста: ${error.message}`)
-    } finally {
-      setBusy(false)
     }
   }
 
@@ -254,7 +262,6 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
         <input
           type="checkbox"
           checked={Boolean(post.is_adult)}
-          disabled={busy}
           onChange={(event) => updatePostFlag(post, 'is_adult', event.target.checked)}
         />
         <span>Эротика</span>
@@ -263,7 +270,6 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
         <input
           type="checkbox"
           checked={Boolean(post.is_paid)}
-          disabled={busy}
           onChange={(event) => updatePostFlag(post, 'is_paid', event.target.checked)}
         />
         <span>Платный</span>
@@ -272,7 +278,6 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
         <input
           type="checkbox"
           checked={Boolean(post.is_prime_only)}
-          disabled={busy}
           onChange={(event) => updatePostFlag(post, 'is_prime_only', event.target.checked)}
         />
         <span>Только подписка</span>

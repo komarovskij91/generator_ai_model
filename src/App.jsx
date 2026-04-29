@@ -349,39 +349,99 @@ function ContentModerationTab({ adminFetch, isActive }) {
 
   const mediaFlagsFor = (url) => content?.media_flags?.[url] || {}
 
+  const setLocalMediaFlag = (url, flags) => {
+    setContent((prev) => {
+      if (!prev) return prev
+      const nextFlags = { ...(prev.media_flags || {}) }
+      if (flags.is_adult || flags.is_paid) {
+        nextFlags[url] = flags
+      } else {
+        delete nextFlags[url]
+      }
+      return { ...prev, media_flags: nextFlags }
+    })
+  }
+
+  const setLocalPostFlag = (postId, key, checked) => {
+    setContent((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        posts: (prev.posts || []).map((post) =>
+          post.id === postId ? { ...post, [key]: checked } : post
+        ),
+      }
+    })
+  }
+
+  const removeLocalStoryMedia = (url) => {
+    setContent((prev) => {
+      if (!prev) return prev
+      const nextFlags = { ...(prev.media_flags || {}) }
+      delete nextFlags[url]
+      return {
+        ...prev,
+        media_flags: nextFlags,
+        sections: (prev.sections || []).map((section) => ({
+          ...section,
+          items: (section.items || []).filter((item) => item.url !== url),
+        })),
+      }
+    })
+  }
+
   const updateMediaFlag = async (url, key, checked) => {
     if (!content?.model_id) return
     const current = mediaFlagsFor(url)
-    setBusy(true)
+    const nextFlags = { ...current, [key]: checked }
+    setLocalMediaFlag(url, nextFlags)
+    setStatus('Сохраняю флаг медиа…')
     try {
       await adminFetch(`/admin/models/${encodeURIComponent(content.model_id)}/media-flags`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ media_flags: { [url]: { ...current, [key]: checked } } }),
+        body: JSON.stringify({ media_flags: { [url]: nextFlags } }),
       })
-      await loadContent(content.model_id)
       setStatus('Флаг медиа сохранён')
     } catch (error) {
+      setLocalMediaFlag(url, current)
       setStatus(`Флаг медиа: ${error.message}`)
-    } finally {
-      setBusy(false)
+    }
+  }
+
+  const deleteStoryMedia = async (item) => {
+    if (!content?.model_id) return
+    if (!window.confirm('Удалить эту сторис из модели?')) return
+    const previousContent = content
+    removeLocalStoryMedia(item.url)
+    setStatus('Удаляю сторис…')
+    try {
+      await adminFetch(`/admin/models/${encodeURIComponent(content.model_id)}/stories`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: item.url, kind: item.kind }),
+      })
+      setStatus('Сторис удалена')
+    } catch (error) {
+      setContent(previousContent)
+      setStatus(`Удаление сторис: ${error.message}`)
     }
   }
 
   const updatePostFlag = async (post, key, checked) => {
-    setBusy(true)
+    const previous = Boolean(post[key])
+    setLocalPostFlag(post.id, key, checked)
+    setStatus('Сохраняю флаг поста…')
     try {
       await adminFetch(`/admin/feed/posts/${encodeURIComponent(post.id)}/flags`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [key]: checked }),
       })
-      await loadContent(content.model_id)
       setStatus('Флаг поста сохранён')
     } catch (error) {
+      setLocalPostFlag(post.id, key, previous)
       setStatus(`Флаг поста: ${error.message}`)
-    } finally {
-      setBusy(false)
     }
   }
 
@@ -423,11 +483,19 @@ function ContentModerationTab({ adminFetch, isActive }) {
                       <img src={item.url} alt={section.title} />
                     )}
                     {item.group_id ? <small className="fieldHint">group: {item.group_id}</small> : null}
+                    {(section.id === 'story_images' || section.id === 'story_videos') && (
+                      <button
+                        type="button"
+                        className="dangerButton"
+                        onClick={() => deleteStoryMedia(item)}
+                      >
+                        Удалить сторис
+                      </button>
+                    )}
                     <label className="flagToggle">
                       <input
                         type="checkbox"
                         checked={Boolean(flags.is_adult)}
-                        disabled={busy}
                         onChange={(event) => updateMediaFlag(item.url, 'is_adult', event.target.checked)}
                       />
                       <span>Эротика</span>
@@ -436,7 +504,6 @@ function ContentModerationTab({ adminFetch, isActive }) {
                       <input
                         type="checkbox"
                         checked={Boolean(flags.is_paid)}
-                        disabled={busy}
                         onChange={(event) => updateMediaFlag(item.url, 'is_paid', event.target.checked)}
                       />
                       <span>Платный</span>
@@ -465,7 +532,6 @@ function ContentModerationTab({ adminFetch, isActive }) {
                     <input
                       type="checkbox"
                       checked={Boolean(post.is_adult)}
-                      disabled={busy}
                       onChange={(event) => updatePostFlag(post, 'is_adult', event.target.checked)}
                     />
                     <span>Эротика</span>
@@ -474,7 +540,6 @@ function ContentModerationTab({ adminFetch, isActive }) {
                     <input
                       type="checkbox"
                       checked={Boolean(post.is_paid)}
-                      disabled={busy}
                       onChange={(event) => updatePostFlag(post, 'is_paid', event.target.checked)}
                     />
                     <span>Платный</span>
@@ -483,7 +548,6 @@ function ContentModerationTab({ adminFetch, isActive }) {
                     <input
                       type="checkbox"
                       checked={Boolean(post.is_prime_only)}
-                      disabled={busy}
                       onChange={(event) => updatePostFlag(post, 'is_prime_only', event.target.checked)}
                     />
                     <span>Только подписка</span>

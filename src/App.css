@@ -587,6 +587,11 @@ pre {
   height: 16px;
 }
 
+.dangerButton {
+  background: #dc2626;
+  color: #fff;
+}
+
 @media (max-width: 720px) {
   .feedDraftTop {
     grid-template-columns: 1fr;
