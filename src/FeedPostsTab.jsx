@@ -231,6 +231,55 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     }
   }
 
+  const updatePostFlag = async (post, key, checked) => {
+    setBusy(true)
+    try {
+      await adminFetch(`/admin/feed/posts/${encodeURIComponent(post.id)}/flags`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: checked }),
+      })
+      await refreshAll(true)
+      setStatus('Флаг поста сохранён')
+    } catch (error) {
+      setStatus(`Флаг поста: ${error.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const postFlagControls = (post) => (
+    <div className="postFlagControls">
+      <label className="flagToggle">
+        <input
+          type="checkbox"
+          checked={Boolean(post.is_adult)}
+          disabled={busy}
+          onChange={(event) => updatePostFlag(post, 'is_adult', event.target.checked)}
+        />
+        <span>Эротика</span>
+      </label>
+      <label className="flagToggle">
+        <input
+          type="checkbox"
+          checked={Boolean(post.is_paid)}
+          disabled={busy}
+          onChange={(event) => updatePostFlag(post, 'is_paid', event.target.checked)}
+        />
+        <span>Платный</span>
+      </label>
+      <label className="flagToggle">
+        <input
+          type="checkbox"
+          checked={Boolean(post.is_prime_only)}
+          disabled={busy}
+          onChange={(event) => updatePostFlag(post, 'is_prime_only', event.target.checked)}
+        />
+        <span>Только подписка</span>
+      </label>
+    </div>
+  )
+
   return (
     <section className="feedPostsPage">
       <section className="card">
@@ -421,6 +470,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                   <strong>{post.model_name}</strong>
                   <span>{post.status_ru}</span>
                   {post.caption_ru ? <p>{post.caption_ru}</p> : null}
+                  {postFlagControls(post)}
                 </div>
                 <div className="miniRow feedActions">
                   <button type="button" disabled={busy} onClick={() => publishPost(post.id)}>
@@ -462,6 +512,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                     {post.published_at ? ` · ${new Date(post.published_at * 1000).toLocaleString('ru-RU')}` : ''}
                   </span>
                   {post.caption_ru ? <p>{post.caption_ru}</p> : null}
+                  {postFlagControls(post)}
                 </div>
                 <div className="miniRow feedActions">
                   <button type="button" className="secondaryMuted" disabled={busy} onClick={() => deletePost(post.id)}>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 import FeedPostsTab from './FeedPostsTab'
 
@@ -244,6 +244,262 @@ const formFromRedisModel = (doc) => {
   }
 }
 
+function ContentSettingsTab({ adminFetch, isActive }) {
+  const [settings, setSettings] = useState({ hide_adult_content: false })
+  const [status, setStatus] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const refresh = useCallback(async () => {
+    setBusy(true)
+    try {
+      const response = await adminFetch('/admin/content-settings')
+      const data = await response.json()
+      setSettings({ hide_adult_content: Boolean(data.hide_adult_content) })
+      setStatus('Настройки загружены')
+    } catch (error) {
+      setStatus(`Ошибка настроек: ${error.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }, [adminFetch])
+
+  useEffect(() => {
+    if (isActive) refresh()
+  }, [isActive, refresh])
+
+  const updateHideAdult = async (checked) => {
+    setBusy(true)
+    try {
+      const response = await adminFetch('/admin/content-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hide_adult_content: checked }),
+      })
+      const data = await response.json()
+      setSettings({ hide_adult_content: Boolean(data.hide_adult_content) })
+      setStatus(checked ? 'Эротика скрыта в приложении' : 'Эротика снова разрешена к выдаче')
+    } catch (error) {
+      setStatus(`Сохранение настроек: ${error.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="card">
+      <h2>Настройки контента</h2>
+      <p className="fieldHint">
+        Настройка применяется на backend для всех пользователей. Когда она включена, приложение не получает контент,
+        отмеченный как эротика.
+      </p>
+      <label className="flagToggle">
+        <input
+          type="checkbox"
+          checked={settings.hide_adult_content}
+          disabled={busy}
+          onChange={(event) => updateHideAdult(event.target.checked)}
+        />
+        <span>Скрывать эротику в приложении</span>
+      </label>
+      <button type="button" disabled={busy} onClick={refresh}>Обновить</button>
+      {status ? <p className="status">{status}</p> : null}
+    </section>
+  )
+}
+
+function ContentModerationTab({ adminFetch, isActive }) {
+  const [models, setModels] = useState([])
+  const [selectedModelId, setSelectedModelId] = useState('')
+  const [content, setContent] = useState(null)
+  const [status, setStatus] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const loadModels = useCallback(async () => {
+    const response = await adminFetch('/admin/models')
+    const data = await response.json()
+    const items = Array.isArray(data.items) ? data.items : []
+    setModels(items)
+    if (!selectedModelId && items[0]?.id) setSelectedModelId(items[0].id)
+  }, [adminFetch, selectedModelId])
+
+  const loadContent = useCallback(async (modelId = selectedModelId) => {
+    if (!modelId) return
+    setBusy(true)
+    try {
+      const response = await adminFetch(`/admin/models/${encodeURIComponent(modelId)}/content`)
+      const data = await response.json()
+      setContent(data)
+      setStatus('Контент модели загружен')
+    } catch (error) {
+      setStatus(`Ошибка загрузки контента: ${error.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }, [adminFetch, selectedModelId])
+
+  useEffect(() => {
+    if (!isActive) return
+    loadModels().catch((error) => setStatus(`Ошибка списка моделей: ${error.message}`))
+  }, [isActive, loadModels])
+
+  useEffect(() => {
+    if (!isActive || !selectedModelId) return
+    loadContent(selectedModelId)
+  }, [isActive, selectedModelId, loadContent])
+
+  const mediaFlagsFor = (url) => content?.media_flags?.[url] || {}
+
+  const updateMediaFlag = async (url, key, checked) => {
+    if (!content?.model_id) return
+    const current = mediaFlagsFor(url)
+    setBusy(true)
+    try {
+      await adminFetch(`/admin/models/${encodeURIComponent(content.model_id)}/media-flags`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ media_flags: { [url]: { ...current, [key]: checked } } }),
+      })
+      await loadContent(content.model_id)
+      setStatus('Флаг медиа сохранён')
+    } catch (error) {
+      setStatus(`Флаг медиа: ${error.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const updatePostFlag = async (post, key, checked) => {
+    setBusy(true)
+    try {
+      await adminFetch(`/admin/feed/posts/${encodeURIComponent(post.id)}/flags`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: checked }),
+      })
+      await loadContent(content.model_id)
+      setStatus('Флаг поста сохранён')
+    } catch (error) {
+      setStatus(`Флаг поста: ${error.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="contentModerationPage">
+      <section className="card">
+        <h2>Разметка контента модели</h2>
+        <p className="fieldHint">
+          Старый контент без галочек считается разрешённым. Эротика фильтруется backend-настройкой, платный контент пока только помечается.
+        </p>
+        <div className="miniRow">
+          <select value={selectedModelId} onChange={(event) => setSelectedModelId(event.target.value)}>
+            <option value="">— Выберите модель —</option>
+            {models.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.name || model.id} · {model.id}
+              </option>
+            ))}
+          </select>
+          <button type="button" disabled={busy || !selectedModelId} onClick={() => loadContent()}>
+            Обновить
+          </button>
+        </div>
+        {status ? <p className="status">{status}</p> : null}
+      </section>
+
+      {content?.sections?.map((section) => (
+        <section className="card" key={section.id}>
+          <h3>{section.title}</h3>
+          {section.items?.length ? (
+            <div className="moderationGrid">
+              {section.items.map((item) => {
+                const flags = mediaFlagsFor(item.url)
+                return (
+                  <article className="moderationCard" key={`${section.id}-${item.group_id || ''}-${item.url}`}>
+                    {item.kind === 'video' ? (
+                      <video src={item.url} controls muted playsInline />
+                    ) : (
+                      <img src={item.url} alt={section.title} />
+                    )}
+                    {item.group_id ? <small className="fieldHint">group: {item.group_id}</small> : null}
+                    <label className="flagToggle">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(flags.is_adult)}
+                        disabled={busy}
+                        onChange={(event) => updateMediaFlag(item.url, 'is_adult', event.target.checked)}
+                      />
+                      <span>Эротика</span>
+                    </label>
+                    <label className="flagToggle">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(flags.is_paid)}
+                        disabled={busy}
+                        onChange={(event) => updateMediaFlag(item.url, 'is_paid', event.target.checked)}
+                      />
+                      <span>Платный</span>
+                    </label>
+                  </article>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="fieldHint">Нет контента в этой секции.</p>
+          )}
+        </section>
+      ))}
+
+      {content && (
+        <section className="card">
+          <h3>Посты модели</h3>
+          {content.posts?.length ? (
+            <div className="moderationGrid">
+              {content.posts.map((post) => (
+                <article className="moderationCard" key={post.id}>
+                  <img src={post.image_url} alt={post.id} />
+                  <strong>{post.status_ru}</strong>
+                  {post.caption_ru ? <p>{post.caption_ru}</p> : null}
+                  <label className="flagToggle">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(post.is_adult)}
+                      disabled={busy}
+                      onChange={(event) => updatePostFlag(post, 'is_adult', event.target.checked)}
+                    />
+                    <span>Эротика</span>
+                  </label>
+                  <label className="flagToggle">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(post.is_paid)}
+                      disabled={busy}
+                      onChange={(event) => updatePostFlag(post, 'is_paid', event.target.checked)}
+                    />
+                    <span>Платный</span>
+                  </label>
+                  <label className="flagToggle">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(post.is_prime_only)}
+                      disabled={busy}
+                      onChange={(event) => updatePostFlag(post, 'is_prime_only', event.target.checked)}
+                    />
+                    <span>Только подписка</span>
+                  </label>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="fieldHint">Постов у модели пока нет.</p>
+          )}
+        </section>
+      )}
+    </section>
+  )
+}
+
 function App() {
   const [adminLogin, setAdminLogin] = useState(localStorage.getItem('admin_login') || '')
   const [loginDraft, setLoginDraft] = useState(localStorage.getItem('admin_login') || '')
@@ -300,15 +556,15 @@ function App() {
       }
     })
 
-  const withAdminHeaders = (headers = {}) => ({ ...headers, 'X-Admin-Login': adminLogin })
-  const adminFetch = async (path, options = {}) => {
+  const withAdminHeaders = useCallback((headers = {}) => ({ ...headers, 'X-Admin-Login': adminLogin }), [adminLogin])
+  const adminFetch = useCallback(async (path, options = {}) => {
     const response = await fetch(`${BACKEND_BASE_URL}${path}`, {
       ...options,
       headers: withAdminHeaders(options.headers || {}),
     })
     if (!response.ok) throw new Error(await response.text())
     return response
-  }
+  }, [withAdminHeaders])
 
   const appendPushLog = (level, message, detail) => {
     setPushLog((prev) =>
@@ -939,6 +1195,20 @@ function App() {
             >
               Лента постов
             </button>
+            <button
+              type="button"
+              className={mainTab === 'content' ? 'topTab active' : 'topTab'}
+              onClick={() => setMainTab('content')}
+            >
+              Контент
+            </button>
+            <button
+              type="button"
+              className={mainTab === 'settings' ? 'topTab active' : 'topTab'}
+              onClick={() => setMainTab('settings')}
+            >
+              Настройки
+            </button>
           </nav>
         </div>
         <div className="headerActions">
@@ -1073,6 +1343,8 @@ function App() {
       )}
 
       {mainTab === 'posts' && <FeedPostsTab adminFetch={adminFetch} isActive={mainTab === 'posts'} />}
+      {mainTab === 'content' && <ContentModerationTab adminFetch={adminFetch} isActive={mainTab === 'content'} />}
+      {mainTab === 'settings' && <ContentSettingsTab adminFetch={adminFetch} isActive={mainTab === 'settings'} />}
 
       {mainTab === 'editor' && step === 'form' && (
         <section className="card">

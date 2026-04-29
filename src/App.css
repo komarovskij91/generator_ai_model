@@ -517,6 +517,12 @@ pre {
   flex-wrap: wrap;
 }
 
+.postFlagControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
 .feedMiniAvatar {
   width: 40px;
   height: 40px;
@@ -528,6 +534,57 @@ pre {
   margin: 0;
   color: #b91c1c;
   max-width: 420px;
+}
+
+.contentModerationPage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.moderationGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.moderationCard {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 8px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.moderationCard img,
+.moderationCard video {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #0f172a;
+}
+
+.moderationCard p {
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.flagToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #334155;
+  font-size: 13px;
+}
+
+.flagToggle input {
+  width: 16px;
+  height: 16px;
 }
 
 @media (max-width: 720px) {
