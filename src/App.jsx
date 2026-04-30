@@ -953,14 +953,10 @@ function App() {
     }
   }
 
-  const onPasteContentPhotos = (event) => {
-    const items = Array.from(event.clipboardData?.items || [])
-    const imageFiles = items
-      .filter((item) => item.kind === 'file')
-      .map((item) => item.getAsFile())
-      .filter(Boolean)
+  const addContentPhotoFiles = (files, sourceLabel = 'фото') => {
+    const imageFiles = Array.from(files || []).filter(Boolean)
     if (!imageFiles.length) {
-      setStatus('В буфере нет изображений')
+      setStatus(`Нет изображений для добавления`)
       return
     }
     const invalidType = imageFiles.find((file) => !CONTENT_ALLOWED_TYPES.has(file.type))
@@ -979,7 +975,20 @@ function App() {
       return
     }
     setPastedContentFiles(next)
-    setStatus(`Добавлено фото: ${imageFiles.length}. Всего: ${next.length}`)
+    setStatus(`Добавлено ${sourceLabel}: ${imageFiles.length}. Всего: ${next.length}`)
+  }
+
+  const onPasteContentPhotos = (event) => {
+    const items = Array.from(event.clipboardData?.items || [])
+    const imageFiles = items
+      .filter((item) => item.kind === 'file')
+      .map((item) => item.getAsFile())
+      .filter(Boolean)
+    if (!imageFiles.length) {
+      setStatus('В буфере нет изображений')
+      return
+    }
+    addContentPhotoFiles(imageFiles, 'из буфера')
   }
 
   const clearPastedPhotos = () => {
@@ -1515,10 +1524,19 @@ function App() {
 
           <section className="card prefillCard">
             <h2>Генерация контента для модели</h2>
-            <label>Вставка фото (только Ctrl+V, 1-30 шт, jpg/png/webp, до 10MB)</label>
+            <label>Фото для промтов (1-30 шт, jpg/png/webp, до 10MB)</label>
             <div className="pasteZone" onPaste={onPasteContentPhotos} tabIndex={0}>
-              Нажми сюда и вставь фотографии через Ctrl+V
+              Нажми сюда и вставь фотографии через Ctrl+V или выбери файлы ниже
             </div>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              onChange={(event) => {
+                addContentPhotoFiles(event.target.files, 'из файлов')
+                event.target.value = ''
+              }}
+            />
             <div className="miniRow">
               <span>Добавлено: {pastedContentFiles.length}</span>
               <button type="button" onClick={clearPastedPhotos}>Очистить</button>
