@@ -40,6 +40,9 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     ...Object.fromEntries(captionFields.map(({ key }) => [key, edit[key] ?? draft[key] ?? ''])),
     likes_count: edit.likes_count ?? draft.likes_count ?? 0,
     dislikes_count: edit.dislikes_count ?? draft.dislikes_count ?? 0,
+    is_adult: Boolean(edit.is_adult ?? draft.is_adult),
+    is_paid: Boolean(edit.is_paid ?? draft.is_paid),
+    is_prime_only: Boolean(edit.is_prime_only ?? draft.is_prime_only),
   })
 
   const refreshAll = useCallback(async (silent = false) => {
@@ -430,6 +433,50 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                         }))
                       }
                     />
+                  </div>
+                  <div className="card" style={{ minWidth: 220 }}>
+                    <label>Доступ поста</label>
+                    <div className="postFlagControls">
+                      <label className="flagToggle">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(draftValue(draft, 'is_adult'))}
+                          onChange={(e) =>
+                            setDraftEdits((prev) => ({
+                              ...prev,
+                              [draft.id]: { ...(prev[draft.id] || {}), is_adult: e.target.checked },
+                            }))
+                          }
+                        />
+                        <span>Эротика</span>
+                      </label>
+                      <label className="flagToggle">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(draftValue(draft, 'is_paid'))}
+                          onChange={(e) =>
+                            setDraftEdits((prev) => ({
+                              ...prev,
+                              [draft.id]: { ...(prev[draft.id] || {}), is_paid: e.target.checked },
+                            }))
+                          }
+                        />
+                        <span>Платный</span>
+                      </label>
+                      <label className="flagToggle">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(draftValue(draft, 'is_prime_only'))}
+                          onChange={(e) =>
+                            setDraftEdits((prev) => ({
+                              ...prev,
+                              [draft.id]: { ...(prev[draft.id] || {}), is_prime_only: e.target.checked },
+                            }))
+                          }
+                        />
+                        <span>Только подписка</span>
+                      </label>
+                    </div>
                   </div>
                 </div>
                 <div className="miniRow feedActions">

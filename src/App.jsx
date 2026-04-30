@@ -95,6 +95,7 @@ const defaultForm = {
   chatImageUrls: [],
   chatVideoUrls: [],
   profileImageUrls: [],
+  mediaFlags: {},
   generatedMediaGroups: [],
   sortOrder: 100,
   isActive: true,
@@ -148,6 +149,7 @@ const modelDataFromForm = (form) => ({
     chat_video_urls: form.chatVideoUrls,
     profile_image_urls: form.profileImageUrls,
   },
+  media_flags: form.mediaFlags || {},
   generated_media_groups: form.generatedMediaGroups,
   is_active: Boolean(form.isActive),
   sort_order: Number(form.sortOrder),
@@ -235,6 +237,7 @@ const formFromRedisModel = (doc) => {
     chatImageUrls: [...(sm.chat_image_urls || [])],
     chatVideoUrls: [...(sm.chat_video_urls || [])],
     profileImageUrls: [...(sm.profile_image_urls || [])],
+    mediaFlags: { ...(doc.media_flags || {}) },
     generatedMediaGroups: Array.isArray(doc.generated_media_groups) ? doc.generated_media_groups : [],
     sortOrder: doc.sort_order != null ? Number(doc.sort_order) : defaultForm.sortOrder,
     isActive: doc.is_active !== false,
@@ -875,6 +878,11 @@ function App() {
     } else if (mediaKind === 'profile_image') {
       setField('profileImageUrls', form.profileImageUrls.filter((item) => item !== url))
     }
+    setForm((prev) => {
+      const mediaFlags = { ...(prev.mediaFlags || {}) }
+      delete mediaFlags[url]
+      return { ...prev, mediaFlags }
+    })
   }
 
   const uploadPrefillPhoto = async (file) => {
@@ -1043,9 +1051,17 @@ function App() {
   const toggleGeneratedSelection = (promptId, url, target) => {
     const key = `${promptId}|||${url}`
     setContentSelection((prev) => {
-      const current = prev[key] || { story: false, chat: false, profile: false }
+      const current = prev[key] || { story: false, chat: false, profile: false, is_adult: false, is_paid: false }
       const nextItem = { ...current, [target]: !current[target] }
       return { ...prev, [key]: nextItem }
+    })
+  }
+
+  const toggleGeneratedFlag = (promptId, url, flag) => {
+    const key = `${promptId}|||${url}`
+    setContentSelection((prev) => {
+      const current = prev[key] || { story: false, chat: false, profile: false, is_adult: false, is_paid: false }
+      return { ...prev, [key]: { ...current, [flag]: !current[flag] } }
     })
   }
 
@@ -1061,7 +1077,13 @@ function App() {
         if (flags.story) targets.push('story')
         if (flags.chat) targets.push('chat')
         if (flags.profile) targets.push('profile')
-        return { prompt_id: promptId, url, targets }
+        return {
+          prompt_id: promptId,
+          url,
+          targets,
+          is_adult: Boolean(flags.is_adult),
+          is_paid: Boolean(flags.is_paid),
+        }
       })
       .filter((item) => item.targets.length > 0)
     if (!selected.length) {
@@ -1082,11 +1104,13 @@ function App() {
       const data = await response.json()
       const patch = data.patch || {}
       const media = patch.story_media || {}
+      const mediaFlags = patch.media_flags || {}
       setForm((prev) => ({
         ...prev,
         storyImageUrls: dedupe([...(prev.storyImageUrls || []), ...(media.story_image_urls || [])]),
         chatImageUrls: dedupe([...(prev.chatImageUrls || []), ...(media.chat_image_urls || [])]),
         profileImageUrls: dedupe([...(prev.profileImageUrls || []), ...(media.profile_image_urls || [])]),
+        mediaFlags: { ...(prev.mediaFlags || {}), ...mediaFlags },
         generatedMediaGroups: patch.generated_media_groups || prev.generatedMediaGroups,
       }))
       if (data.session?.prompt_groups) {
@@ -1522,13 +1546,21 @@ function App() {
                       <div className="generatedGrid">
                         {group.kling_output_urls.map((url) => {
                           const key = `${group.id}|||${url}`
-                          const checked = contentSelection[key] || { story: false, chat: false, profile: false }
+                          const checked = contentSelection[key] || {
+                            story: false,
+                            chat: false,
+                            profile: false,
+                            is_adult: false,
+                            is_paid: false,
+                          }
                           return (
                             <div key={url} className="generatedItem">
                               <img src={url} alt="generated" />
                               <label><input type="checkbox" checked={checked.story} onChange={() => toggleGeneratedSelection(group.id, url, 'story')} /> сторис</label>
                               <label><input type="checkbox" checked={checked.chat} onChange={() => toggleGeneratedSelection(group.id, url, 'chat')} /> фото для чата</label>
                               <label><input type="checkbox" checked={checked.profile} onChange={() => toggleGeneratedSelection(group.id, url, 'profile')} /> фото для профиля</label>
+                              <label><input type="checkbox" checked={checked.is_adult} onChange={() => toggleGeneratedFlag(group.id, url, 'is_adult')} /> эротика</label>
+                              <label><input type="checkbox" checked={checked.is_paid} onChange={() => toggleGeneratedFlag(group.id, url, 'is_paid')} /> платный</label>
                             </div>
                           )
                         })}
