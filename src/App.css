@@ -517,6 +517,11 @@ pre {
   flex-wrap: wrap;
 }
 
+.feedLoadSentinel {
+  min-height: 1px;
+  width: 100%;
+}
+
 .postFlagControls {
   display: flex;
   flex-wrap: wrap;

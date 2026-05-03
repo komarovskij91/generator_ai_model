@@ -1,9 +1,33 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-function sortPosts(items, status) {
-  return (items || [])
-    .filter((item) => item.status === status)
-    .sort((a, b) => (b.published_at || b.updated_at || 0) - (a.published_at || a.updated_at || 0))
+const DRAFT_PAGE_SIZE = 20
+const POST_PAGE_SIZE = 30
+
+const emptyPage = { hasMore: false, nextOffset: 0, totalCount: 0, isLoading: false }
+
+function mergeById(existing, incoming, { replace = false } = {}) {
+  if (replace) return incoming || []
+  const seen = new Set((existing || []).map((item) => item.id))
+  return [...(existing || []), ...(incoming || []).filter((item) => !seen.has(item.id))]
+}
+
+function LoadMoreTrigger({ disabled, onLoadMore }) {
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const node = ref.current
+    if (!node || disabled) return undefined
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) onLoadMore()
+      },
+      { rootMargin: '360px 0px' }
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [disabled, onLoadMore])
+
+  return <div ref={ref} className="feedLoadSentinel" aria-hidden="true" />
 }
 
 const captionFields = [
@@ -18,7 +42,8 @@ const captionFields = [
 export default function FeedPostsTab({ adminFetch, isActive }) {
   const [sourceStats, setSourceStats] = useState({ total_count: 0, available_count: 0, used_count: 0 })
   const [drafts, setDrafts] = useState([])
-  const [posts, setPosts] = useState([])
+  const [readyPosts, setReadyPosts] = useState([])
+  const [publishedPosts, setPublishedPosts] = useState([])
   const [draftEdits, setDraftEdits] = useState({})
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
@@ -26,9 +51,27 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
   const [seedLikesCount, setSeedLikesCount] = useState(0)
   const [showReadyPosts, setShowReadyPosts] = useState(false)
   const [showPublishedPosts, setShowPublishedPosts] = useState(false)
+  const [draftPage, setDraftPage] = useState(emptyPage)
+  const [readyPage, setReadyPage] = useState(emptyPage)
+  const [publishedPage, setPublishedPage] = useState(emptyPage)
+  const draftPageRef = useRef(emptyPage)
+  const readyPageRef = useRef(emptyPage)
+  const publishedPageRef = useRef(emptyPage)
 
-  const readyPosts = useMemo(() => sortPosts(posts, 'ready'), [posts])
-  const publishedPosts = useMemo(() => sortPosts(posts, 'published'), [posts])
+  const setDraftPageState = useCallback((nextPage) => {
+    draftPageRef.current = nextPage
+    setDraftPage(nextPage)
+  }, [])
+
+  const setReadyPageState = useCallback((nextPage) => {
+    readyPageRef.current = nextPage
+    setReadyPage(nextPage)
+  }, [])
+
+  const setPublishedPageState = useCallback((nextPage) => {
+    publishedPageRef.current = nextPage
+    setPublishedPage(nextPage)
+  }, [])
 
   const draftValue = (draft, key) => {
     if (draftEdits[draft.id] && key in draftEdits[draft.id]) return draftEdits[draft.id][key]
@@ -45,41 +88,84 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     is_prime_only: Boolean(edit.is_prime_only ?? draft.is_prime_only),
   })
 
+  const loadSourceStats = useCallback(async () => {
+    const sourceRes = await adminFetch('/admin/feed/source-photos?limit=0')
+    const sourceData = await sourceRes.json()
+    setSourceStats({
+      total_count: Number(sourceData.total_count || 0),
+      available_count: Number(sourceData.available_count || 0),
+      used_count: Number(sourceData.used_count || 0),
+    })
+  }, [adminFetch])
+
+  const loadDrafts = useCallback(async ({ reset = false } = {}) => {
+    const currentPage = draftPageRef.current
+    if (currentPage.isLoading || (!reset && !currentPage.hasMore)) return
+    const offset = reset ? 0 : Number(currentPage.nextOffset || 0)
+    setDraftPageState({ ...currentPage, isLoading: true })
+    try {
+      const res = await adminFetch(`/admin/feed/drafts?limit=${DRAFT_PAGE_SIZE}&offset=${offset}`)
+      const data = await res.json()
+      const items = Array.isArray(data.items) ? data.items : []
+      setDrafts((prev) => mergeById(prev, items, { replace: reset }))
+      setDraftPageState({
+        hasMore: Boolean(data.has_more),
+        nextOffset: Number(data.next_offset || 0),
+        totalCount: Number(data.total_count || items.length),
+        isLoading: false,
+      })
+    } catch (error) {
+      setDraftPageState({ ...draftPageRef.current, isLoading: false })
+      setStatus(`Загрузка черновиков: ${error.message}`)
+    }
+  }, [adminFetch, setDraftPageState])
+
+  const loadPosts = useCallback(async (postStatus, { reset = false } = {}) => {
+    const setItems = postStatus === 'published' ? setPublishedPosts : setReadyPosts
+    const pageRef = postStatus === 'published' ? publishedPageRef : readyPageRef
+    const setPageState = postStatus === 'published' ? setPublishedPageState : setReadyPageState
+    const currentPage = pageRef.current
+    if (currentPage.isLoading || (!reset && !currentPage.hasMore)) return
+    const offset = reset ? 0 : Number(currentPage.nextOffset || 0)
+    setPageState({ ...currentPage, isLoading: true })
+    try {
+      const res = await adminFetch(`/admin/feed/posts?status=${postStatus}&limit=${POST_PAGE_SIZE}&offset=${offset}`)
+      const data = await res.json()
+      const items = Array.isArray(data.items) ? data.items : []
+      setItems((prev) => mergeById(prev, items, { replace: reset }))
+      setPageState({
+        hasMore: Boolean(data.has_more),
+        nextOffset: Number(data.next_offset || 0),
+        totalCount: Number(data.total_count || items.length),
+        isLoading: false,
+      })
+    } catch (error) {
+      setPageState({ ...pageRef.current, isLoading: false })
+      setStatus(`Загрузка постов: ${error.message}`)
+    }
+  }, [adminFetch, setPublishedPageState, setReadyPageState])
+
   const refreshAll = useCallback(async (silent = false) => {
     if (!silent) setBusy(true)
     try {
-      const [sourceRes, draftRes, postRes] = await Promise.all([
-        adminFetch('/admin/feed/source-photos'),
-        adminFetch('/admin/feed/drafts'),
-        adminFetch('/admin/feed/posts'),
+      await Promise.all([
+        loadSourceStats(),
+        loadDrafts({ reset: true }),
+        loadPosts('ready', { reset: true }),
+        loadPosts('published', { reset: true }),
       ])
-      const [sourceData, draftData, postData] = await Promise.all([
-        sourceRes.json(),
-        draftRes.json(),
-        postRes.json(),
-      ])
-      setSourceStats({
-        total_count: Number(sourceData.total_count || 0),
-        available_count: Number(sourceData.available_count || 0),
-        used_count: Number(sourceData.used_count || 0),
-      })
-      setDrafts(Array.isArray(draftData.items) ? draftData.items : [])
-      setPosts(Array.isArray(postData.items) ? postData.items : [])
       if (!silent) setStatus('Раздел постов обновлён')
     } catch (error) {
       setStatus(`Ошибка загрузки постов: ${error.message}`)
     } finally {
       if (!silent) setBusy(false)
     }
-  }, [adminFetch])
+  }, [loadDrafts, loadPosts, loadSourceStats])
 
   useEffect(() => {
     if (!isActive) return undefined
     refreshAll()
-    const timer = window.setInterval(() => {
-      refreshAll(true)
-    }, 8000)
-    return () => window.clearInterval(timer)
+    return undefined
   }, [isActive, refreshAll])
 
   const uploadFiles = async (files) => {
@@ -235,11 +321,12 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
   }
 
   const setLocalPostFlag = (postId, key, checked) => {
-    setPosts((prev) =>
+    const updateItems = (prev) =>
       (prev || []).map((post) =>
         post.id === postId ? { ...post, [key]: checked } : post
       )
-    )
+    setReadyPosts(updateItems)
+    setPublishedPosts(updateItems)
   }
 
   const updatePostFlag = async (post, key, checked) => {
@@ -360,7 +447,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
               <article key={draft.id} className="feedDraftCard">
                 <div className="feedDraftHeader">
                   <div className="miniRow">
-                    {draft.model_avatar_url ? <img className="feedMiniAvatar" src={draft.model_avatar_url} alt={draft.model_name} /> : null}
+                    {draft.model_avatar_url ? <img className="feedMiniAvatar" src={draft.model_avatar_url} alt={draft.model_name} loading="lazy" decoding="async" /> : null}
                     <div>
                       <h3>{draft.model_name}</h3>
                       <p className="fieldHint">{draft.status_ru}</p>
@@ -369,7 +456,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                   {draft.error ? <p className="feedError">{draft.error}</p> : null}
                 </div>
                 <div className="feedDraftTop">
-                  <img className="feedSourcePreview" src={draft.source_photo_url} alt={draft.source_photo_id} />
+                  <img className="feedSourcePreview" src={draft.source_photo_url} alt={draft.source_photo_id} loading="lazy" decoding="async" />
                 </div>
                 <div className="feedCandidateGrid">
                   {draft.image_candidates.map((candidate) => (
@@ -384,7 +471,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                         }))
                       }
                     >
-                      <img src={candidate.image_url} alt={candidate.id} />
+                      <img src={candidate.image_url} alt={candidate.id} loading="lazy" decoding="async" />
                       <span>{selectedId === candidate.id ? 'Выбрано' : 'Выбрать'}</span>
                     </button>
                   ))}
@@ -500,13 +587,21 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
             )
           })}
           {drafts.length === 0 ? <p className="fieldHint">Черновиков пока нет.</p> : null}
+          {drafts.length > 0 ? (
+            <p className="fieldHint">Показано {drafts.length} из {draftPage.totalCount}</p>
+          ) : null}
+          <LoadMoreTrigger
+            disabled={!isActive || !draftPage.hasMore || draftPage.isLoading}
+            onLoadMore={() => loadDrafts()}
+          />
+          {draftPage.isLoading ? <p className="fieldHint">Подгружаю черновики…</p> : null}
         </div>
       </section>
 
       <section className="card">
         <div className="pushListHeader">
           <div className="feedStat">
-            <strong>{readyPosts.length}</strong>
+            <strong>{readyPage.totalCount || readyPosts.length}</strong>
             <span>Готово к автопубликации</span>
           </div>
           <button type="button" disabled={busy || readyPosts.length === 0} onClick={() => setShowReadyPosts((prev) => !prev)}>
@@ -517,7 +612,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
           <div className="feedPreparedList">
             {readyPosts.map((post) => (
               <article key={post.id} className="feedPreparedCard">
-                <img src={post.image_url} alt={post.id} />
+                <img src={post.image_url} alt={post.id} loading="lazy" decoding="async" />
                 <div className="feedPreparedMeta">
                   <strong>{post.model_name}</strong>
                   <span>{post.status_ru}</span>
@@ -534,6 +629,11 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                 </div>
               </article>
             ))}
+            <LoadMoreTrigger
+              disabled={!isActive || !showReadyPosts || !readyPage.hasMore || readyPage.isLoading}
+              onLoadMore={() => loadPosts('ready')}
+            />
+            {readyPage.isLoading ? <p className="fieldHint">Подгружаю посты…</p> : null}
           </div>
         )}
       </section>
@@ -541,7 +641,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
       <section className="card">
         <div className="pushListHeader">
           <div className="feedStat">
-            <strong>{publishedPosts.length}</strong>
+            <strong>{publishedPage.totalCount || publishedPosts.length}</strong>
             <span>Уже опубликовано</span>
           </div>
           <button
@@ -556,7 +656,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
           <div className="feedPreparedList">
             {publishedPosts.map((post) => (
               <article key={post.id} className="feedPreparedCard">
-                <img src={post.image_url} alt={post.id} />
+                <img src={post.image_url} alt={post.id} loading="lazy" decoding="async" />
                 <div className="feedPreparedMeta">
                   <strong>{post.model_name}</strong>
                   <span>
@@ -573,6 +673,11 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                 </div>
               </article>
             ))}
+            <LoadMoreTrigger
+              disabled={!isActive || !showPublishedPosts || !publishedPage.hasMore || publishedPage.isLoading}
+              onLoadMore={() => loadPosts('published')}
+            />
+            {publishedPage.isLoading ? <p className="fieldHint">Подгружаю посты…</p> : null}
           </div>
         )}
       </section>

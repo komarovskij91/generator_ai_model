@@ -1,73 +1,142 @@
-# Уведомления «как в Telegram» на iOS (аватар отправителя)
+# iOS Rich Push Notifications With Model Avatar
 
-Обычный remote push с полями `title` / `body` **не умеет** подставить отдельную «фотку контакта» сбаннера: слева всегда **иконка приложения**. Чтобы получить **аватар модели** (или стиль мессенджера), нужен один из двух путей ниже.
+Current push implementation uses an iOS Notification Service Extension to create communication-style notifications for model chat messages.
 
----
+## Current Implementation
 
-## Вариант A — **Notification Service Extension** (NSE) + картинка по URL
+The iOS project contains a `NotificationService` target.
 
-Подходит, если вы хотите **превью изображения** в развёрнутом уведомлении (и подготовку к ручному оформлению контента).
+The extension:
 
-### Что сделать в Xcode
+- reads custom keys from `userInfo`;
+- downloads `chat_model_avatar_url` when present;
+- creates `INSendMessageIntent`;
+- creates `INPerson` for the model sender;
+- calls `UNNotificationContent.updating(from:)`;
+- falls back to `UNNotificationAttachment` if intent-based update fails.
 
-1. **File → New → Target → Notification Service Extension**  
-   Добавить к основному таргету приложения (тот же Team / bundle id prefix).
+Result:
 
-2. В **основном** таргете включить capability **Push Notifications** (у вас уже есть).
+- supported iOS versions can show a model sender name and avatar in a communication-style notification;
+- if communication update fails, notification still arrives in a simpler format.
 
-3. В **NotificationService** (сгенерированный класс):
-   - В `didReceive(_:withContentHandler:)` прочитать **custom-ключи** из `request.content.userInfo` (не из `aps`).
-   - Если есть URL аватара (например `chat_model_avatar_url`), **скачать** файл (HTTPS, разумный размер; лимиты Apple ~ несколько МБ для вложения).
-   - Сохранить во **временный файл** на диске и создать `UNNotificationAttachment` (обычно `identifier: "avatar"`, `options: nil` или с thumbnail clipping).
-   - Вызвать `contentHandler` с изменённым `content` (с вложением).
+## Required Payload
 
-4. В payload APNS в блок **`aps`** добавить:
-   ```json
-   "mutable-content": 1
-   ```
-   Иначе NSE **не запустится**.
+### `aps`
 
-### Что должен слать бэкенд
+```json
+{
+  "mutable-content": 1
+}
+```
 
-- В **корне** JSON (рядом с `aps`, не внутри `aps`):
-  - `chat_model_id` — id чата / модели (у вас уже уходит при тестовом пуше).
-  - `chat_model_avatar_url` — публичный **HTTPS** URL картинки (например аватар из R2); бэкенд уже может добавлять это поле, когда выбрана модель.
+`mutable-content` is required. Without it, the Notification Service Extension will not run.
 
-Без `mutable-content: 1` iOS не даст расширению изменить контент. Пока расширения нет, пуши без `mutable-content` ведут себя как сейчас.
+### Root custom keys
 
-### Ограничения
+- `chat_model_id` — required for deep link and conversation identity.
+- `chat_model_avatar_url` — optional public HTTPS avatar URL.
+- `chat_model_name` — optional sender display name; fallback can use notification title.
 
-- Время жизни NSE **ограничено** (~30 секунд) — медленный CDN может привести к отсутствию картинки.
-- URL должен быть доступен **с устройства** (без приватных IP, желательно без редирект-цепочек в ад).
-- Формат файла: то, что понимает `UNNotificationAttachment` (часто jpeg/png).
+Recommended payload shape:
 
----
+```json
+{
+  "aps": {
+    "alert": {
+      "title": "Model Name",
+      "body": "Message preview"
+    },
+    "mutable-content": 1,
+    "sound": "default"
+  },
+  "chat_model_id": "model_id_here",
+  "chat_model_name": "Model Name",
+  "chat_model_avatar_url": "https://..."
+}
+```
 
-## Вариант B — **Communication Notifications** (стиль «Сообщения»)
+## Backend Responsibilities
 
-Даёт системный UI, похожий на **входящее сообщение от контакта** (имя + аватар в фирменном стиле iOS), но:
+Backend push send logic should:
 
-- Нужны **отдельные capability / настройки** (Communication Notifications), интеграция с **Intents** (`INSendMessageIntent` и связка с push).
-- Сложнее в сопровождении, чем NSE; имеет смысл, если цель именно **нативный мессенджерный** вид, а не просто картинка.
+- include `aps.mutable-content = 1`;
+- include `chat_model_id`;
+- include a stable model name;
+- include a lightweight avatar image URL where available;
+- avoid sending huge images or unstable redirect URLs.
 
-Документация Apple: ищите по запросам *Communication Notifications*, *INSendMessageIntent*, *Push Notification*.
+Admin test push should use the same payload shape as production push.
 
----
+## iOS App Responsibilities
 
-## Что выбрать
+The main app listens for notification open events and deep-links to the relevant chat.
 
-| Цель | Рекомендация |
-|------|----------------|
-| Быстро показать **фото/превью** в уведомлении | **NSE** + `mutable-content` + URL в payload |
-| Максимально **как системный мессенджер** | **Communication Notifications** |
+Expected flow:
 
-Текущее приложение без NSE/Communication показывает только **иконку приложения** и текст — это нормальное поведение iOS.
+1. APNS notification arrives.
+2. Notification Service tries to enrich the notification.
+3. User taps notification.
+4. App receives `chat_model_id`.
+5. App resolves model from available models/chat list/profile endpoint.
+6. App opens chat and starts/loads session.
 
----
+## Fallback Behavior
 
-## Ссылка на официальные материалы
+Fallback is required because iOS communication notification APIs can fail depending on OS state, timing, avatar fetch, or intent update behavior.
 
-- [Modifying content in newly delivered notifications](https://developer.apple.com/documentation/usernotifications/modifying-content_in_newly_delivered_notifications) (Notification Service Extension)
-- Human Interface Guidelines — раздел про уведомления и вложения
+Fallback path:
 
-После появления NSE на стороне бэкенда для «боевых» пушей нужно будет добавить **`mutable-content": 1`** в `aps` там, где нужна картинка (тестовый и прод-пайплайн).
+- download avatar image;
+- store temporary file;
+- attach with `UNNotificationAttachment`;
+- deliver modified content.
+
+If avatar download fails, deliver text notification.
+
+## Limitations
+
+- iOS controls the sender avatar mask.
+- Public API does not allow forcing rounded-square sender image in communication-style notifications.
+- Notification Service has limited execution time.
+- Avatar URL must be public HTTPS.
+- Large images or slow CDN responses can cause text-only fallback.
+
+## Admin Testing Requirements
+
+The `generator_ai_model` push tab should allow testing:
+
+- a candidate user/device;
+- a selected model;
+- title/body;
+- optional model binding;
+- communication-style payload.
+
+Backend endpoints:
+
+- `GET /admin/push/candidates`
+- `POST /admin/push/send-test`
+
+## Related App Features
+
+Push notifications connect to:
+
+- chat list;
+- model resolution;
+- `ChatView`;
+- `NotificationService`;
+- backend registered APNS device tokens.
+
+## App Review Notes
+
+If showing push functionality in App Review materials:
+
+- demonstrate permission prompt only if it appears naturally;
+- explain that push is used for chat/message updates from AI characters;
+- do not rely on push as the only way to demonstrate core app function.
+
+## References
+
+- [Modifying content in newly delivered notifications](https://developer.apple.com/documentation/usernotifications/modifying-content_in_newly_delivered_notifications)
+- Apple `INSendMessageIntent`
+- Apple Communication Notifications documentation
