@@ -50,6 +50,23 @@ const splitList = (value) =>
     .map((item) => item.trim())
     .filter(Boolean)
 
+const MODEL_LOCALES = [
+  { key: 'ru', suffix: 'Ru', label: 'RU' },
+  { key: 'en', suffix: 'En', label: 'EN' },
+  { key: 'de', suffix: 'De', label: 'DE' },
+  { key: 'fr', suffix: 'Fr', label: 'FR' },
+  { key: 'pt', suffix: 'Pt', label: 'PT' },
+  { key: 'es', suffix: 'Es', label: 'ES' },
+]
+
+const EXTRA_MODEL_LOCALES = MODEL_LOCALES.filter((item) => item.key !== 'ru' && item.key !== 'en')
+
+const localizedTextFromForm = (form, base) =>
+  Object.fromEntries(MODEL_LOCALES.map(({ key, suffix }) => [key, form[`${base}${suffix}`] || '']))
+
+const localizedListFromForm = (form, base) =>
+  Object.fromEntries(MODEL_LOCALES.map(({ key, suffix }) => [key, splitList(form[`${base}${suffix}`])]))
+
 const CYR_TO_LAT = {
   а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh',
   з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o',
@@ -70,6 +87,10 @@ const defaultForm = {
   slug: '',
   nameRu: '',
   nameEn: '',
+  nameDe: '',
+  nameFr: '',
+  namePt: '',
+  nameEs: '',
   gender: 'female',
   age: 24,
   targetAgeGroup: 'younger',
@@ -78,12 +99,28 @@ const defaultForm = {
   interestKeys: [],
   bioShortRu: '',
   bioShortEn: '',
+  bioShortDe: '',
+  bioShortFr: '',
+  bioShortPt: '',
+  bioShortEs: '',
   bioFullRu: '',
   bioFullEn: '',
+  bioFullDe: '',
+  bioFullFr: '',
+  bioFullPt: '',
+  bioFullEs: '',
   speakingStyleRu: '',
   speakingStyleEn: '',
+  speakingStyleDe: '',
+  speakingStyleFr: '',
+  speakingStylePt: '',
+  speakingStyleEs: '',
   likesRu: '',
   likesEn: '',
+  likesDe: '',
+  likesFr: '',
+  likesPt: '',
+  likesEs: '',
   allowedTopics: '',
   tabooTopics: '',
   systemPromptCore: '',
@@ -124,7 +161,7 @@ const ruSourcePayloadFromForm = (form) => ({
 
 const modelDataFromForm = (form) => ({
   slug: form.slug.trim(),
-  name_i18n: { ru: form.nameRu, en: form.nameEn },
+  name_i18n: localizedTextFromForm(form, 'name'),
   age: Number(form.age),
   gender: form.gender,
   target_age_group: form.targetAgeGroup,
@@ -132,10 +169,10 @@ const modelDataFromForm = (form) => ({
   ethnicity_key: form.ethnicityKey,
   interest_keys: form.interestKeys,
   interests: form.interestKeys,
-  bio_short_i18n: { ru: form.bioShortRu, en: form.bioShortEn },
-  bio_full_i18n: { ru: form.bioFullRu, en: form.bioFullEn },
-  speaking_style_i18n: { ru: form.speakingStyleRu, en: form.speakingStyleEn },
-  likes_i18n: { ru: splitList(form.likesRu), en: splitList(form.likesEn) },
+  bio_short_i18n: localizedTextFromForm(form, 'bioShort'),
+  bio_full_i18n: localizedTextFromForm(form, 'bioFull'),
+  speaking_style_i18n: localizedTextFromForm(form, 'speakingStyle'),
+  likes_i18n: localizedListFromForm(form, 'likes'),
   allowed_topics: splitList(form.allowedTopics),
   taboo_topics: splitList(form.tabooTopics),
   system_prompt_core: form.systemPromptCore,
@@ -172,16 +209,6 @@ const normalizePrefillPatch = (prefill) => {
   const patch = {
     slug: asString(prefill.slug),
     gender: asString(prefill.gender) || 'female',
-    nameRu: asString(prefill.nameRu || prefill.name_ru),
-    nameEn: asString(prefill.nameEn || prefill.name_en),
-    bioShortRu: asString(prefill.bioShortRu || prefill.bio_short_ru),
-    bioShortEn: asString(prefill.bioShortEn || prefill.bio_short_en),
-    bioFullRu: asString(prefill.bioFullRu || prefill.bio_full_ru),
-    bioFullEn: asString(prefill.bioFullEn || prefill.bio_full_en),
-    speakingStyleRu: asString(prefill.speakingStyleRu || prefill.speaking_style_ru),
-    speakingStyleEn: asString(prefill.speakingStyleEn || prefill.speaking_style_en),
-    likesRu: asString(prefill.likesRu || prefill.likes_ru),
-    likesEn: asString(prefill.likesEn || prefill.likes_en),
     allowedTopics: asString(prefill.allowedTopics || prefill.allowed_topics),
     tabooTopics: asString(prefill.tabooTopics || prefill.taboo_topics),
     systemPromptCore: asString(prefill.systemPromptCore || prefill.system_prompt_core),
@@ -190,6 +217,13 @@ const normalizePrefillPatch = (prefill) => {
     archetypeKeys: toArray(prefill.archetypeKeys || prefill.archetype_keys),
     interestKeys: toArray(prefill.interestKeys || prefill.interest_keys),
   }
+  MODEL_LOCALES.forEach(({ key, suffix }) => {
+    patch[`name${suffix}`] = asString(prefill[`name${suffix}`] || prefill[`name_${key}`])
+    patch[`bioShort${suffix}`] = asString(prefill[`bioShort${suffix}`] || prefill[`bio_short_${key}`])
+    patch[`bioFull${suffix}`] = asString(prefill[`bioFull${suffix}`] || prefill[`bio_full_${key}`])
+    patch[`speakingStyle${suffix}`] = asString(prefill[`speakingStyle${suffix}`] || prefill[`speaking_style_${key}`])
+    patch[`likes${suffix}`] = asString(prefill[`likes${suffix}`] || prefill[`likes_${key}`])
+  })
   if ('age' in prefill && !Number.isNaN(Number(prefill.age))) {
     patch.age = Number(prefill.age)
   }
@@ -205,27 +239,15 @@ const formFromRedisModel = (doc) => {
   const bioF = doc.bio_full_i18n || {}
   const sp = doc.speaking_style_i18n || {}
   const likes = doc.likes_i18n || {}
-  const likesRuArr = likes.ru
-  const likesEnArr = likes.en
-  return {
+  const result = {
     ...defaultForm,
     slug: doc.slug || '',
-    nameRu: nameI.ru || doc.name || '',
-    nameEn: nameI.en || '',
     gender: doc.gender || 'female',
     age: doc.age != null ? Number(doc.age) : defaultForm.age,
     targetAgeGroup: doc.target_age_group || defaultForm.targetAgeGroup,
     archetypeKeys: Array.isArray(doc.archetype_keys) ? [...doc.archetype_keys] : [],
     ethnicityKey: doc.ethnicity_key || 'european',
     interestKeys: Array.isArray(doc.interest_keys) ? [...doc.interest_keys] : [],
-    bioShortRu: bioS.ru || doc.bio_short || '',
-    bioShortEn: bioS.en || '',
-    bioFullRu: bioF.ru || doc.bio_full || '',
-    bioFullEn: bioF.en || '',
-    speakingStyleRu: sp.ru || doc.speaking_style || '',
-    speakingStyleEn: sp.en || '',
-    likesRu: Array.isArray(likesRuArr) ? likesRuArr.join(', ') : '',
-    likesEn: Array.isArray(likesEnArr) ? likesEnArr.join(', ') : '',
     allowedTopics: Array.isArray(doc.allowed_topics) ? doc.allowed_topics.join(', ') : '',
     tabooTopics: Array.isArray(doc.taboo_topics) ? doc.taboo_topics.join(', ') : '',
     systemPromptCore: doc.system_prompt_core || '',
@@ -245,6 +267,14 @@ const formFromRedisModel = (doc) => {
     createdBy: doc.created_by || defaultForm.createdBy,
     source: doc.source || defaultForm.source,
   }
+  MODEL_LOCALES.forEach(({ key, suffix }) => {
+    result[`name${suffix}`] = nameI[key] || (key === 'ru' ? doc.name : '') || ''
+    result[`bioShort${suffix}`] = bioS[key] || (key === 'ru' ? doc.bio_short : '') || ''
+    result[`bioFull${suffix}`] = bioF[key] || (key === 'ru' ? doc.bio_full : '') || ''
+    result[`speakingStyle${suffix}`] = sp[key] || (key === 'ru' ? doc.speaking_style : '') || ''
+    result[`likes${suffix}`] = Array.isArray(likes[key]) ? likes[key].join(', ') : ''
+  })
+  return result
 }
 
 function ContentSettingsTab({ adminFetch, isActive }) {
@@ -1135,7 +1165,7 @@ function App() {
 
   const generateEnglish = async () => {
     setIsLoading(true)
-    setStatus('Генерация EN...')
+    setStatus('Генерация EN/DE/FR/PT/ES...')
     try {
       const response = await adminFetch('/admin/generate-en', {
         method: 'POST',
@@ -1143,15 +1173,29 @@ function App() {
         body: JSON.stringify({ source_ru: ruSourcePayloadFromForm(form) }),
       })
       const en = (await response.json()).fields_en || {}
+      const asString = (value) => {
+        if (Array.isArray(value)) return value.join(', ')
+        if (value === null || value === undefined) return ''
+        return String(value).trim()
+      }
+      const fieldValue = (camelBase, snakeBase, key, suffix, fallback) =>
+        asString(en[`${camelBase}${suffix}`] ?? en[`${snakeBase}_${key}`] ?? fallback)
       setForm((prev) => ({
         ...prev,
-        nameEn: en.name_en || prev.nameEn,
-        bioShortEn: en.bio_short_en || prev.bioShortEn,
-        bioFullEn: en.bio_full_en || prev.bioFullEn,
-        speakingStyleEn: en.speaking_style_en || prev.speakingStyleEn,
-        likesEn: (en.likes_en || splitList(prev.likesEn)).join(', '),
+        ...Object.fromEntries(
+          MODEL_LOCALES.filter(({ key }) => key !== 'ru').flatMap(({ key, suffix }) => [
+            [`name${suffix}`, fieldValue('name', 'name', key, suffix, prev[`name${suffix}`])],
+            [`bioShort${suffix}`, fieldValue('bioShort', 'bio_short', key, suffix, prev[`bioShort${suffix}`])],
+            [`bioFull${suffix}`, fieldValue('bioFull', 'bio_full', key, suffix, prev[`bioFull${suffix}`])],
+            [
+              `speakingStyle${suffix}`,
+              fieldValue('speakingStyle', 'speaking_style', key, suffix, prev[`speakingStyle${suffix}`]),
+            ],
+            [`likes${suffix}`, fieldValue('likes', 'likes', key, suffix, prev[`likes${suffix}`])],
+          ])
+        ),
       }))
-      setStatus('EN обновлены')
+      setStatus('Языки EN/DE/FR/PT/ES обновлены')
     } finally {
       setIsLoading(false)
     }
@@ -1606,6 +1650,12 @@ function App() {
               <label>Имя EN (`name_i18n.en`)</label>
               <input value={form.nameEn} onChange={(e) => setField('nameEn', e.target.value)} />
               <small className="fieldExample">Пример: Ivy</small>
+              {EXTRA_MODEL_LOCALES.map(({ key, suffix, label }) => (
+                <div key={`name-${key}`} className="localeField">
+                  <label>Имя {label} (`name_i18n.{key}`)</label>
+                  <input value={form[`name${suffix}`]} onChange={(e) => setField(`name${suffix}`, e.target.value)} />
+                </div>
+              ))}
               <label>Slug (`slug`) *</label>
               <input value={form.slug} onChange={(e) => setField('slug', e.target.value)} />
               <small className="fieldHint">Уникальный тех-ID модели в snake_case.</small>
@@ -1642,7 +1692,7 @@ function App() {
                 />
                 Модель активна (`is_active`) — участвует в списке <code>models:active</code>
               </label>
-              <button disabled={isLoading} onClick={generateEnglish}>Сгенерировать EN из RU</button>
+              <button disabled={isLoading} onClick={generateEnglish}>Сгенерировать EN/DE/FR/PT/ES из RU</button>
             </article>
 
             <article className="card">
@@ -1690,23 +1740,47 @@ function App() {
               <label>Короткое описание EN (`bio_short_i18n.en`)</label>
               <textarea value={form.bioShortEn} onChange={(e) => setField('bioShortEn', e.target.value)} />
               <small className="fieldExample">Пример: Warm and playful, loves cozy conversations.</small>
+              {EXTRA_MODEL_LOCALES.map(({ key, suffix, label }) => (
+                <div key={`bio-short-${key}`} className="localeField">
+                  <label>Короткое описание {label} (`bio_short_i18n.{key}`)</label>
+                  <textarea value={form[`bioShort${suffix}`]} onChange={(e) => setField(`bioShort${suffix}`, e.target.value)} />
+                </div>
+              ))}
               <label>Полное описание RU (`bio_full_i18n.ru`) *</label>
               <textarea value={form.bioFullRu} onChange={(e) => setField('bioFullRu', e.target.value)} />
               <small className="fieldExample">Пример: Любит музыку, прогулки и живой флирт без грубости.</small>
               <label>Полное описание EN (`bio_full_i18n.en`)</label>
               <textarea value={form.bioFullEn} onChange={(e) => setField('bioFullEn', e.target.value)} />
               <small className="fieldExample">Пример: Loves music, walks, and playful conversations.</small>
+              {EXTRA_MODEL_LOCALES.map(({ key, suffix, label }) => (
+                <div key={`bio-full-${key}`} className="localeField">
+                  <label>Полное описание {label} (`bio_full_i18n.{key}`)</label>
+                  <textarea value={form[`bioFull${suffix}`]} onChange={(e) => setField(`bioFull${suffix}`, e.target.value)} />
+                </div>
+              ))}
               <label>Стиль общения RU (`speaking_style_i18n.ru`) *</label>
               <textarea value={form.speakingStyleRu} onChange={(e) => setField('speakingStyleRu', e.target.value)} />
               <small className="fieldExample">Пример: Коротко, живо, с вопросами и редкими эмодзи.</small>
               <label>Стиль общения EN (`speaking_style_i18n.en`)</label>
               <textarea value={form.speakingStyleEn} onChange={(e) => setField('speakingStyleEn', e.target.value)} />
               <small className="fieldExample">Пример: Short, engaging, asks follow-up questions.</small>
+              {EXTRA_MODEL_LOCALES.map(({ key, suffix, label }) => (
+                <div key={`speaking-style-${key}`} className="localeField">
+                  <label>Стиль общения {label} (`speaking_style_i18n.{key}`)</label>
+                  <textarea value={form[`speakingStyle${suffix}`]} onChange={(e) => setField(`speakingStyle${suffix}`, e.target.value)} />
+                </div>
+              ))}
               <label>Что любит RU (`likes_i18n.ru`)</label>
               <input value={form.likesRu} onChange={(e) => setField('likesRu', e.target.value)} placeholder="музыка, кино, путешествия" />
               <small className="fieldHint">Список через запятую.</small>
               <label>Что любит EN (`likes_i18n.en`)</label>
               <input value={form.likesEn} onChange={(e) => setField('likesEn', e.target.value)} placeholder="music, movies, travel" />
+              {EXTRA_MODEL_LOCALES.map(({ key, suffix, label }) => (
+                <div key={`likes-${key}`} className="localeField">
+                  <label>Что любит {label} (`likes_i18n.{key}`)</label>
+                  <input value={form[`likes${suffix}`]} onChange={(e) => setField(`likes${suffix}`, e.target.value)} />
+                </div>
+              ))}
               <label>Разрешенные темы (`allowed_topics`)</label>
               <input value={form.allowedTopics} onChange={(e) => setField('allowedTopics', e.target.value)} />
               <small className="fieldExample">Пример: communication, relationships, lifestyle</small>
