@@ -126,6 +126,7 @@ const defaultForm = {
   systemPromptCore: '',
   avatarUrl: '',
   avatarVideoUrl: '',
+  avatarVideoMobileUrl: '',
   coverUrl: '',
   storyImageUrls: [],
   storyVideoUrls: [],
@@ -179,6 +180,7 @@ const modelDataFromForm = (form) => ({
   story_media: {
     avatar_url: form.avatarUrl || null,
     avatar_video_url: form.avatarVideoUrl || null,
+    avatar_video_mobile_url: form.avatarVideoMobileUrl || null,
     cover_url: form.coverUrl || null,
     story_image_urls: form.storyImageUrls,
     story_video_urls: form.storyVideoUrls,
@@ -253,6 +255,7 @@ const formFromRedisModel = (doc) => {
     systemPromptCore: doc.system_prompt_core || '',
     avatarUrl: sm.avatar_url || doc.avatar_url || '',
     avatarVideoUrl: sm.avatar_video_url || '',
+    avatarVideoMobileUrl: sm.avatar_video_mobile_url || '',
     coverUrl: sm.cover_url || '',
     storyImageUrls: [...(sm.story_image_urls || [])],
     storyVideoUrls: [...(sm.story_video_urls || [])],
@@ -1213,19 +1216,30 @@ function App() {
     setIsLoading(true)
     try {
       if (editingModelId) {
-        await adminFetch(`/admin/models/${encodeURIComponent(editingModelId)}`, {
+        const response = await adminFetch(`/admin/models/${encodeURIComponent(editingModelId)}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ model_data: previewModel }),
         })
-        setStatus(`Модель ${editingModelId} сохранена в Redis`)
+        const data = await response.json()
+        const mobileUrl = data?.model?.story_media?.avatar_video_mobile_url || ''
+        if (mobileUrl) {
+          setField('avatarVideoMobileUrl', mobileUrl)
+          setStatus(`Модель ${editingModelId} сохранена. Mini avatar video создан.`)
+        } else if (form.avatarVideoUrl) {
+          setStatus(`Модель ${editingModelId} сохранена, но mini avatar video не создан — проверь backend ffmpeg/R2 logs.`)
+        } else {
+          setStatus(`Модель ${editingModelId} сохранена в Redis`)
+        }
       } else {
-        await adminFetch('/admin/models', {
+        const response = await adminFetch('/admin/models', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ model_data: previewModel }),
         })
-        setStatus('Модель создана')
+        const data = await response.json()
+        const mobileUrl = data?.model?.story_media?.avatar_video_mobile_url || ''
+        setStatus(mobileUrl ? 'Модель создана. Mini avatar video создан.' : 'Модель создана')
         setForm(defaultForm)
         setPrefillImageUrl('')
         setPrefillBrief('')
@@ -1798,6 +1812,16 @@ function App() {
               <label>Видео-аватар (`story_media.avatar_video_url`)</label>
               <input type="file" accept="video/*" onChange={(e) => uploadSingleMedia(e.target.files?.[0], 'avatar_video')} />
               {form.avatarVideoUrl && <a href={form.avatarVideoUrl} target="_blank" rel="noreferrer">avatar video url</a>}
+              <label>Mini видео-аватар (`story_media.avatar_video_mobile_url`)</label>
+              <input
+                value={form.avatarVideoMobileUrl}
+                onChange={(e) => setField('avatarVideoMobileUrl', e.target.value)}
+                placeholder="создаётся backend после сохранения модели"
+              />
+              {form.avatarVideoMobileUrl && <a href={form.avatarVideoMobileUrl} target="_blank" rel="noreferrer">mobile avatar video url</a>}
+              <small className="fieldHint">
+                Backend добавляет облегчённую версию при создании/сохранении модели, если задан `avatar_video_url`.
+              </small>
               <label>Обложка (`story_media.cover_url`)</label>
               <input type="file" accept="image/*" onChange={(e) => uploadSingleMedia(e.target.files?.[0], 'cover')} />
               {form.coverUrl && <a href={form.coverUrl} target="_blank" rel="noreferrer">cover url</a>}
