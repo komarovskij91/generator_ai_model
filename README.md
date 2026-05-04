@@ -6,7 +6,9 @@ Web admin frontend for the Noloo stack. It is the operational console for model 
 
 - Local path: `/Users/komarovskij/ai_chat/generator_ai_model`
 - Git: `https://github.com/komarovskij91/generator_ai_model.git`
+- Production admin URL: `https://generatoraimodel-production.up.railway.app`
 - Backend dependency: `https://web-production-c51d.up.railway.app`
+- Last pushed state at handover: `455fdce feat(models): show mobile avatar video status`
 
 ## Run
 
@@ -15,11 +17,11 @@ npm install
 npm run dev
 ```
 
-Useful commands:
+Useful checks:
 
 ```bash
-npm run build
 npm run lint
+npm run build
 ```
 
 Optional frontend env:
@@ -34,25 +36,32 @@ The admin app covers:
 
 - admin login;
 - model creation/editing;
-- RU/EN copy generation;
+- all model locale fields `ru/en/de/fr/pt/es`;
 - image/brief-based model prefill;
+- media upload/delete;
 - content sessions;
 - Kling generation;
-- applying selected media into a model payload;
-- media flagging;
+- applying selected media into model payload;
+- generated media flags;
+- model content flags;
+- story deletion;
 - source photo uploads;
 - feed draft generation;
 - prepared/published post management;
 - push notification testing.
 
-It is no longer only a model creator.
+It is not only a model creator.
 
 ## Model Creation
 
-The model flow includes:
+The model form includes:
 
-- RU/EN model name and copy fields;
-- gender and age group fields;
+- `name_i18n` for `ru/en/de/fr/pt/es`;
+- `bio_short_i18n` for `ru/en/de/fr/pt/es`;
+- `bio_full_i18n` for `ru/en/de/fr/pt/es`;
+- `speaking_style_i18n` for `ru/en/de/fr/pt/es`;
+- `likes_i18n` for `ru/en/de/fr/pt/es`;
+- gender, age, and target age group;
 - stable filter keys:
   - `gender`
   - `target_age_group`
@@ -77,7 +86,28 @@ Backend endpoints:
 - `GET /admin/models/{model_id}`
 - `PATCH /admin/models/{model_id}`
 
-When a model has `story_media.avatar_video_url`, backend can generate `story_media.avatar_video_mobile_url`. The iOS app prefers the mobile URL.
+## Mobile Avatar Video Field
+
+The form sends:
+
+- `story_media.avatar_video_url`
+- optional `story_media.avatar_video_mobile_url`
+
+Normal flow:
+
+1. Admin uploads normal avatar video.
+2. Preview shows `avatar_video_url`.
+3. Admin saves/creates model.
+4. Backend tries to create `avatar_video_mobile_url` with `ffmpeg`.
+5. Admin status now says whether mini avatar video was created.
+
+If the mini URL does not appear after save:
+
+- check backend logs for `avatar_video_mobile_*`;
+- check `ffmpeg` availability;
+- check R2 env;
+- check source video download;
+- check that production backend is deployed with current code.
 
 ## Model Content And Moderation
 
@@ -145,8 +175,6 @@ Prompt generation rules:
 
 ## Feed Posts
 
-The feed tab manages the iOS Posts surface.
-
 Workflow:
 
 1. Upload source photos.
@@ -182,13 +210,6 @@ Performance baseline:
 - do not reintroduce full interval refresh;
 - backend uses batch Redis loading where possible.
 
-Caption baseline:
-
-- first-person model voice;
-- short social style;
-- localized for app languages where available;
-- no hashtags by default.
-
 ## Push Testing
 
 Admin can test push notifications against registered users/devices.
@@ -206,24 +227,6 @@ Payload should support:
 - `aps.mutable-content = 1`.
 
 Detailed iOS rich push notes live in `docs/IOS_TELEGRAM_STYLE_PUSH.md`.
-
-## Backend Requirements
-
-The admin app expects backend to provide:
-
-- admin auth;
-- media upload/delete;
-- model prefill/generation;
-- model create/update/list/detail;
-- content sessions;
-- Kling jobs;
-- feed source/draft/post APIs;
-- push candidates/test send;
-- content settings and media flags.
-
-Production backend:
-
-- `https://web-production-c51d.up.railway.app`
 
 ## External Services
 
@@ -249,12 +252,17 @@ Admin/backend workflows depend on:
 
 After admin changes verify:
 
+- `npm run lint`;
+- `npm run build`;
 - admin login;
 - model list/detail;
 - create/update model;
+- all six locale fields preserve on edit;
+- mini avatar video status after save;
 - content flags;
 - source photo upload;
 - feed draft pagination;
 - prepared/published post pagination;
 - push candidate loading;
 - production backend base URL selection.
+

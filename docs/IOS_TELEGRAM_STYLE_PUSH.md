@@ -2,9 +2,21 @@
 
 Current push implementation uses an iOS Notification Service Extension to create communication-style notifications for model chat messages.
 
-## Current Implementation
+## Local Files
 
-The iOS project contains a `NotificationService` target.
+iOS app:
+
+- `/Users/komarovskij/ai_chat/ai_chat/NotificationService`
+- `/Users/komarovskij/ai_chat/ai_chat/ai_chat/ai_chatApp.swift`
+- `/Users/komarovskij/ai_chat/ai_chat/ai_chat/ContentView.swift`
+
+Backend/admin/worker:
+
+- `/Users/komarovskij/ai_chat/ai_chat_back/main.py`
+- `/Users/komarovskij/ai_chat/generator_ai_model/src/App.jsx`
+- `/Users/komarovskij/ai_chat/noloo_notification/main.py`
+
+## Current Implementation
 
 The extension:
 
@@ -22,7 +34,7 @@ Result:
 
 ## Required Payload
 
-### `aps`
+`aps` must include:
 
 ```json
 {
@@ -30,9 +42,7 @@ Result:
 }
 ```
 
-`mutable-content` is required. Without it, the Notification Service Extension will not run.
-
-### Root custom keys
+Root custom keys:
 
 - `chat_model_id` — required for deep link and conversation identity.
 - `chat_model_avatar_url` — optional public HTTPS avatar URL.
@@ -56,6 +66,8 @@ Recommended payload shape:
 }
 ```
 
+Without `mutable-content`, the Notification Service Extension will not run.
+
 ## Backend Responsibilities
 
 Backend push send logic should:
@@ -70,15 +82,13 @@ Admin test push should use the same payload shape as production push.
 
 ## iOS App Responsibilities
 
-The main app listens for notification open events and deep-links to the relevant chat.
-
 Expected flow:
 
 1. APNS notification arrives.
 2. Notification Service tries to enrich the notification.
 3. User taps notification.
 4. App receives `chat_model_id`.
-5. App resolves model from available models/chat list/profile endpoint.
+5. App resolves model from available models, chat list, or profile endpoint.
 6. App opens chat and starts/loads session.
 
 ## Fallback Behavior
@@ -102,7 +112,7 @@ If avatar download fails, deliver text notification.
 - Avatar URL must be public HTTPS.
 - Large images or slow CDN responses can cause text-only fallback.
 
-## Admin Testing Requirements
+## Admin Testing
 
 The `generator_ai_model` push tab should allow testing:
 
@@ -117,16 +127,6 @@ Backend endpoints:
 - `GET /admin/push/candidates`
 - `POST /admin/push/send-test`
 
-## Related App Features
-
-Push notifications connect to:
-
-- chat list;
-- model resolution;
-- `ChatView`;
-- `NotificationService`;
-- backend registered APNS device tokens.
-
 ## App Review Notes
 
 If showing push functionality in App Review materials:
@@ -140,3 +140,4 @@ If showing push functionality in App Review materials:
 - [Modifying content in newly delivered notifications](https://developer.apple.com/documentation/usernotifications/modifying-content_in_newly_delivered_notifications)
 - Apple `INSendMessageIntent`
 - Apple Communication Notifications documentation
+
