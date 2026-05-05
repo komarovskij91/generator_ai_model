@@ -1611,6 +1611,17 @@ function App() {
                       <span>{group.status_ru || '—'}</span>
                     </div>
                     <p>{group.prompt_ru || group.prompt}</p>
+                    {(group.description_ru || group.description_en || group.topics?.length || group.outfit?.length || group.location || group.mood?.length || group.shot_type) && (
+                      <div className="fieldHint">
+                        {group.description_ru && <div><strong>Описание RU:</strong> {group.description_ru}</div>}
+                        {group.description_en && <div><strong>Description EN:</strong> {group.description_en}</div>}
+                        {!!group.topics?.length && <div><strong>topics:</strong> {group.topics.join(', ')}</div>}
+                        {!!group.outfit?.length && <div><strong>outfit:</strong> {group.outfit.join(', ')}</div>}
+                        {group.location && <div><strong>location:</strong> {group.location}</div>}
+                        {!!group.mood?.length && <div><strong>mood:</strong> {group.mood.join(', ')}</div>}
+                        {group.shot_type && <div><strong>shot_type:</strong> {group.shot_type}</div>}
+                      </div>
+                    )}
                     <button
                       type="button"
                       disabled={isLoading || ['queued', 'running'].includes(group.status)}
