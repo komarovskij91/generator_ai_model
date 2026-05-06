@@ -6,10 +6,11 @@ const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL || 'https://web-production-c51d.up.railway.app'
 const CONTENT_DRAFT_KEY = 'generator_content_draft_v1'
 const FORM_DRAFT_KEY = 'generator_form_draft_v1'
-const CONTENT_MAX_FILES = 30
+const CONTENT_MAX_FILES = 200
 const CONTENT_MIN_FILES = 1
 const CONTENT_MAX_FILE_BYTES = 10 * 1024 * 1024
 const CONTENT_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const CONTENT_ACTIVE_STATUSES = new Set(['prompt_queued', 'prompt_running', 'queued', 'running'])
 
 const ARCHETYPE_META = [
   { key: 'alt_girl', labels: { female: 'Альтушка', male: 'Альт-парень' } },
@@ -1035,7 +1036,7 @@ function App() {
       const data = await response.json()
       const groups = Array.isArray(data.prompt_groups) ? data.prompt_groups : []
       setContentPromptGroups(groups)
-      const hasActive = groups.some((item) => item.status === 'running')
+      const hasActive = groups.some((item) => CONTENT_ACTIVE_STATUSES.has(item.status))
       if (hasActive) {
         setTimeout(() => {
           pollContentSession(sessionId, attempts - 1)
@@ -1052,7 +1053,7 @@ function App() {
       return
     }
     setIsLoading(true)
-    setStatus('Генерирую промты...')
+    setStatus('Загружаю фото и запускаю фоновые задачи...')
     try {
       const sessionId = await ensureContentSession()
       const formData = new FormData()
@@ -1062,8 +1063,10 @@ function App() {
         body: formData,
       })
       const data = await response.json()
-      setContentPromptGroups(Array.isArray(data.prompt_groups) ? data.prompt_groups : [])
-      setStatus(`Промты готовы: ${Array.isArray(data.prompt_groups) ? data.prompt_groups.length : 0}`)
+      const groups = Array.isArray(data.prompt_groups) ? data.prompt_groups : []
+      setContentPromptGroups(groups)
+      setStatus(`Задачи запущены: ${groups.length}. Промты и Kling будут появляться ниже автоматически.`)
+      pollContentSession(sessionId, 1000)
     } catch (error) {
       setStatus(`Ошибка генерации промтов: ${error.message}`)
     } finally {
@@ -1089,6 +1092,12 @@ function App() {
       setIsLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (!isAuthed || !contentSessionId) return
+    pollContentSession(contentSessionId, 1000)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthed, contentSessionId])
 
   const toggleGeneratedSelection = (promptId, url, target) => {
     const key = `${promptId}|||${url}`
@@ -1582,7 +1591,7 @@ function App() {
 
           <section className="card prefillCard">
             <h2>Генерация контента для модели</h2>
-            <label>Фото для промтов (1-30 шт, jpg/png/webp, до 10MB)</label>
+            <label>Фото для промтов (1-{CONTENT_MAX_FILES} шт, jpg/png/webp, до 10MB)</label>
             <div className="pasteZone" onPaste={onPasteContentPhotos} tabIndex={0}>
               Нажми сюда и вставь фотографии через Ctrl+V или выбери файлы ниже
             </div>
@@ -1600,7 +1609,7 @@ function App() {
               <button type="button" onClick={clearPastedPhotos}>Очистить</button>
             </div>
             <button disabled={isLoading || !prefillImageUrl} onClick={generateContentPrompts}>
-              Сгенерировать промты по фото
+              Запустить промты + Kling
             </button>
             {!!contentPromptGroups.length && (
               <div className="contentPromptList">
@@ -1624,7 +1633,7 @@ function App() {
                     )}
                     <button
                       type="button"
-                      disabled={isLoading || ['queued', 'running'].includes(group.status)}
+                      disabled={isLoading || CONTENT_ACTIVE_STATUSES.has(group.status) || !(group.prompt_ru || group.prompt)}
                       onClick={() => startKlingForPrompt(group.id)}
                     >
                       Сгенерировать контент
