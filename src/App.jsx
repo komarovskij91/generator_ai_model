@@ -11,6 +11,11 @@ const CONTENT_MIN_FILES = 1
 const CONTENT_MAX_FILE_BYTES = 10 * 1024 * 1024
 const CONTENT_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const CONTENT_ACTIVE_STATUSES = new Set(['prompt_queued', 'prompt_running', 'queued', 'running'])
+const GENDER_OPTIONS = [
+  { value: 'female', label: 'женщина' },
+  { value: 'male', label: 'мужчина' },
+  { value: 'anime', label: 'аниме' },
+]
 
 const ARCHETYPE_META = [
   { key: 'alt_girl', labels: { female: 'Альтушка', male: 'Альт-парень' } },
@@ -1563,26 +1568,18 @@ function App() {
             <input type="file" accept="image/*" onChange={(e) => uploadPrefillPhoto(e.target.files?.[0])} />
             <label>Кого заполняем (для prefill)</label>
             <div className="miniRow">
-              <label>
-                <input
-                  type="radio"
-                  name="prefillGender"
-                  value="female"
-                  checked={prefillGender === 'female'}
-                  onChange={(e) => setPrefillGender(e.target.value)}
-                />
-                женщина
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="prefillGender"
-                  value="male"
-                  checked={prefillGender === 'male'}
-                  onChange={(e) => setPrefillGender(e.target.value)}
-                />
-                мужчина
-              </label>
+              {GENDER_OPTIONS.map((option) => (
+                <label key={option.value}>
+                  <input
+                    type="radio"
+                    name="prefillGender"
+                    value={option.value}
+                    checked={prefillGender === option.value}
+                    onChange={(e) => setPrefillGender(e.target.value)}
+                  />
+                  {option.label}
+                </label>
+              ))}
             </div>
             {prefillImageUrl && <a href={prefillImageUrl} target="_blank" rel="noreferrer">Открыть фото</a>}
             <button disabled={isLoading} onClick={runPrefill}>Сгенерировать черновик</button>
@@ -1696,10 +1693,11 @@ function App() {
               <small className="fieldExample">Пример: ivy_romantic</small>
               <label>Пол (`gender`) *</label>
               <select value={form.gender} onChange={(e) => setField('gender', e.target.value)}>
-                <option value="female">female</option>
-                <option value="male">male</option>
+                {GENDER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.value}</option>
+                ))}
               </select>
-              <small className="fieldExample">Пример: female</small>
+              <small className="fieldExample">Пример: female, male или anime</small>
               <label>Возраст (`age`) *</label>
               <input type="number" value={form.age} onChange={(e) => setField('age', e.target.value)} />
               <small className="fieldExample">Пример: 24</small>
