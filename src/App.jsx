@@ -16,6 +16,11 @@ const GENDER_OPTIONS = [
   { value: 'male', label: 'мужчина' },
   { value: 'anime', label: 'аниме' },
 ]
+const BANNER_GROUPS = [
+  { value: 'female', label: 'Девушки' },
+  { value: 'male', label: 'Мужчины' },
+  { value: 'anime', label: 'Аниме' },
+]
 
 const ARCHETYPE_META = [
   { key: 'alt_girl', labels: { female: 'Альтушка', male: 'Альт-парень' } },
@@ -345,6 +350,129 @@ function ContentSettingsTab({ adminFetch, isActive }) {
       </label>
       <button type="button" disabled={busy} onClick={refresh}>Обновить</button>
       {status ? <p className="status">{status}</p> : null}
+    </section>
+  )
+}
+
+function BannersTab({ adminFetch, isActive }) {
+  const [items, setItems] = useState(() => Object.fromEntries(BANNER_GROUPS.map((group) => [group.value, []])))
+  const [status, setStatus] = useState('')
+  const [busyGender, setBusyGender] = useState('')
+
+  const loadBanners = useCallback(async () => {
+    setStatus('Загружаю банеры...')
+    try {
+      const response = await adminFetch('/admin/app-banners')
+      const data = await response.json()
+      setItems({
+        ...Object.fromEntries(BANNER_GROUPS.map((group) => [group.value, []])),
+        ...(data.items || {}),
+      })
+      setStatus('Банеры загружены')
+    } catch (error) {
+      setStatus(`Ошибка загрузки банеров: ${error.message}`)
+    }
+  }, [adminFetch])
+
+  useEffect(() => {
+    if (isActive) loadBanners()
+  }, [isActive, loadBanners])
+
+  const uploadBanners = async (gender, fileList) => {
+    const files = Array.from(fileList || [])
+    if (!files.length) return
+    setBusyGender(gender)
+    setStatus(`Загружаю банеры: ${gender}...`)
+    try {
+      const formData = new FormData()
+      files.forEach((file) => formData.append('files', file))
+      const response = await adminFetch(`/admin/app-banners/${encodeURIComponent(gender)}/upload`, {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await response.json()
+      setItems(data.items || {})
+      setStatus(`Загружено: ${data.uploaded?.length || 0}`)
+    } catch (error) {
+      setStatus(`Ошибка загрузки: ${error.message}`)
+    } finally {
+      setBusyGender('')
+    }
+  }
+
+  const deleteBanner = async (gender, url) => {
+    if (!window.confirm('Удалить этот банер?')) return
+    setBusyGender(gender)
+    setStatus('Удаляю банер...')
+    try {
+      const response = await adminFetch(
+        `/admin/app-banners/${encodeURIComponent(gender)}?url=${encodeURIComponent(url)}`,
+        { method: 'DELETE' },
+      )
+      const data = await response.json()
+      setItems(data.items || {})
+      setStatus('Банер удален')
+    } catch (error) {
+      setStatus(`Ошибка удаления: ${error.message}`)
+    } finally {
+      setBusyGender('')
+    }
+  }
+
+  return (
+    <section className="bannersPage">
+      <article className="card cardWide">
+        <div className="pushListHeader">
+          <div>
+            <h2>Банеры для первого экрана web app</h2>
+            <p className="fieldHint">
+              Загружай картинки отдельно для девушек, мужчин и аниме. Web app потом будет брать их из
+              <code> /app/banners</code> и листать в верхнем банере.
+            </p>
+          </div>
+          <button type="button" onClick={loadBanners}>Обновить</button>
+        </div>
+        {status && <p className="status">{status}</p>}
+      </article>
+
+      <div className="bannerGroupGrid">
+        {BANNER_GROUPS.map((group) => {
+          const groupItems = Array.isArray(items[group.value]) ? items[group.value] : []
+          return (
+            <article className="card bannerGroupCard" key={group.value}>
+              <h3>{group.label}</h3>
+              <small className="fieldHint">gender: <code>{group.value}</code></small>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                disabled={busyGender === group.value}
+                onChange={(event) => {
+                  uploadBanners(group.value, event.target.files)
+                  event.target.value = ''
+                }}
+              />
+              {!groupItems.length && <p className="fieldHint">Банеров пока нет.</p>}
+              <div className="bannerPreviewGrid">
+                {groupItems.map((item) => (
+                  <div className="bannerPreviewCard" key={item.url}>
+                    <img src={item.url} alt="" />
+                    <a href={item.url} target="_blank" rel="noreferrer">Открыть</a>
+                    <button
+                      type="button"
+                      className="dangerButton"
+                      disabled={busyGender === group.value}
+                      onClick={() => deleteBanner(group.value, item.url)}
+                    >
+                      Удалить
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </article>
+          )
+        })}
+      </div>
     </section>
   )
 }
@@ -1373,6 +1501,13 @@ function App() {
             </button>
             <button
               type="button"
+              className={mainTab === 'banners' ? 'topTab active' : 'topTab'}
+              onClick={() => setMainTab('banners')}
+            >
+              Банеры
+            </button>
+            <button
+              type="button"
               className={mainTab === 'settings' ? 'topTab active' : 'topTab'}
               onClick={() => setMainTab('settings')}
             >
@@ -1513,6 +1648,7 @@ function App() {
 
       {mainTab === 'posts' && <FeedPostsTab adminFetch={adminFetch} isActive={mainTab === 'posts'} />}
       {mainTab === 'content' && <ContentModerationTab adminFetch={adminFetch} isActive={mainTab === 'content'} />}
+      {mainTab === 'banners' && <BannersTab adminFetch={adminFetch} isActive={mainTab === 'banners'} />}
       {mainTab === 'settings' && <ContentSettingsTab adminFetch={adminFetch} isActive={mainTab === 'settings'} />}
 
       {mainTab === 'editor' && step === 'form' && (

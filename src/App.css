@@ -211,6 +211,53 @@ pre {
   border-radius: 8px;
 }
 
+.bannersPage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bannerGroupGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.bannerGroupCard h3 {
+  margin: 0;
+}
+
+.bannerPreviewGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.bannerPreviewCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 8px;
+  background: #f8fafc;
+}
+
+.bannerPreviewCard img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #e5e7eb;
+}
+
+.bannerPreviewCard a {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .headerBrand {
   display: flex;
   flex-direction: column;
