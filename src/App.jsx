@@ -1333,6 +1333,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           reference_image_url: prefillImageUrl,
+          session_id: contentSessionId || null,
           brief_text: prefillBrief.trim(),
           gender: prefillGender,
           regular_count: regularCount,
@@ -1345,7 +1346,7 @@ function App() {
       setContentSessionId(session.session_id || '')
       setContentPromptGroups(groups)
       setContentSelection({})
-      setStatus(`Запущено из банка: ${groups.length}. Картинки будут появляться ниже.`)
+      setStatus(`Добавлено в очередь из банка: ${regularCount + eroticCount}. Всего в сессии: ${groups.length}.`)
       pollContentSession(session.session_id, 1000)
     } catch (error) {
       setStatus(`Ошибка генерации из банка: ${error.message}`)
