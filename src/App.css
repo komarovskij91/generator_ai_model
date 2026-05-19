@@ -211,6 +211,45 @@ pre {
   border-radius: 8px;
 }
 
+.bankGenerateBox {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.bankGenerateBox h3 {
+  margin: 0 0 4px;
+}
+
+.bankGenerateBox input[type='number'] {
+  width: 96px;
+  margin-left: 8px;
+}
+
+.modelContentBankPage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modelContentBankGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.modelContentBankCard h3 {
+  margin: 0;
+}
+
+.bankStats {
+  display: grid;
+  gap: 6px;
+  color: #4b5563;
+  font-size: 13px;
+}
+
 .bannersPage {
   display: flex;
   flex-direction: column;

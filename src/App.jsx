@@ -21,6 +21,12 @@ const BANNER_GROUPS = [
   { value: 'male', label: 'Мужчины' },
   { value: 'anime', label: 'Аниме' },
 ]
+const MODEL_CONTENT_BANK_GROUPS = [
+  { value: 'female_regular', label: 'Обычные фото' },
+  { value: 'female_erotic', label: 'Erotic фото' },
+  { value: 'male_regular', label: 'Мужские фото' },
+  { value: 'male_erotic', label: 'Мужские erotic фото' },
+]
 
 const ARCHETYPE_META = [
   { key: 'alt_girl', labels: { female: 'Альтушка', male: 'Альт-парень' } },
@@ -477,6 +483,105 @@ function BannersTab({ adminFetch, isActive }) {
   )
 }
 
+function ModelContentBankTab({ adminFetch, isActive }) {
+  const [stats, setStats] = useState([])
+  const [status, setStatus] = useState('')
+  const [busyCategory, setBusyCategory] = useState('')
+
+  const loadStats = useCallback(async () => {
+    const response = await adminFetch('/admin/model-content-bank')
+    const data = await response.json()
+    setStats(Array.isArray(data.items) ? data.items : [])
+  }, [adminFetch])
+
+  useEffect(() => {
+    if (!isActive) return
+    loadStats().catch((error) => setStatus(`Ошибка загрузки статистики: ${error.message}`))
+  }, [isActive, loadStats])
+
+  const statFor = (category) => stats.find((item) => item.category === category) || {}
+
+  const uploadFiles = async (category, fileList) => {
+    const files = Array.from(fileList || [])
+    if (!files.length) return
+    const invalidType = files.find((file) => !CONTENT_ALLOWED_TYPES.has(file.type))
+    if (invalidType) {
+      setStatus(`Неверный формат: ${invalidType.name}. Разрешено jpg/png/webp`)
+      return
+    }
+    const tooBig = files.find((file) => file.size > CONTENT_MAX_FILE_BYTES)
+    if (tooBig) {
+      setStatus(`Файл больше 10MB: ${tooBig.name}`)
+      return
+    }
+    setBusyCategory(category)
+    setStatus('Загружаю фото и запускаю генерацию промтов...')
+    try {
+      const formData = new FormData()
+      files.forEach((file) => formData.append('files', file))
+      const response = await adminFetch(`/admin/model-content-bank/${encodeURIComponent(category)}/upload`, {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await response.json()
+      if (Array.isArray(data.stats)) setStats(data.stats)
+      setStatus(`Загружено ${data.created_count || files.length}. Промты делаются в фоне.`)
+      setTimeout(() => {
+        loadStats().catch(() => {})
+      }, 3500)
+    } catch (error) {
+      setStatus(`Ошибка загрузки: ${error.message}`)
+    } finally {
+      setBusyCategory('')
+    }
+  }
+
+  return (
+    <section className="modelContentBankPage">
+      <div className="card">
+        <h2>Контент фото моделей</h2>
+        <p className="fieldHint">
+          Загружай референсы в нужную группу. Backend генерирует prompt metadata и сохраняет свободные промты для будущей
+          генерации моделей. Anime использует женские группы.
+        </p>
+        <button type="button" onClick={loadStats} disabled={Boolean(busyCategory)}>
+          Обновить статистику
+        </button>
+        {status && <p className="status">{status}</p>}
+      </div>
+      <div className="modelContentBankGrid">
+        {MODEL_CONTENT_BANK_GROUPS.map((group) => {
+          const stat = statFor(group.value)
+          return (
+            <article key={group.value} className="card modelContentBankCard">
+              <h3>{group.label}</h3>
+              <div className="bankStats">
+                <span>Свободно: <strong>{stat.available_count || 0}</strong></span>
+                <span>В очереди: {stat.queued_count || 0}</span>
+                <span>В работе: {stat.running_count || 0}</span>
+                <span>Использовано: {stat.used_count || 0}</span>
+                <span>Ошибки: {stat.failed_count || 0}</span>
+                <span>Всего: {stat.total_count || 0}</span>
+              </div>
+              <label>Добавить фото в группу</label>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                disabled={busyCategory === group.value}
+                onChange={(event) => {
+                  uploadFiles(group.value, event.target.files)
+                  event.target.value = ''
+                }}
+              />
+            </article>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 function ContentModerationTab({ adminFetch, isActive }) {
   const [models, setModels] = useState([])
   const [selectedModelId, setSelectedModelId] = useState('')
@@ -769,6 +874,8 @@ function App() {
     () => JSON.parse(localStorage.getItem(CONTENT_DRAFT_KEY) || '{}').contentSelection || {}
   )
   const [pastedContentFiles, setPastedContentFiles] = useState([])
+  const [bankRegularCount, setBankRegularCount] = useState(20)
+  const [bankEroticCount, setBankEroticCount] = useState(20)
   const previewModel = useMemo(() => modelDataFromForm(form), [form])
   const archetypeOptions = useMemo(
     () => ARCHETYPE_META.map((item) => ({ key: item.key, label: pickGenderLabel(item.labels, form.gender) })),
@@ -1207,6 +1314,46 @@ function App() {
     }
   }
 
+  const generateContentFromBank = async () => {
+    if (!prefillImageUrl) {
+      setStatus('Сначала добавь 1 фото-референс в предгенерации')
+      return
+    }
+    const regularCount = Math.max(0, Number(bankRegularCount) || 0)
+    const eroticCount = Math.max(0, Number(bankEroticCount) || 0)
+    if (regularCount + eroticCount <= 0) {
+      setStatus('Укажи количество обычных или erotic фото')
+      return
+    }
+    setIsLoading(true)
+    setStatus('Беру свободные промты из банка и запускаю Kling...')
+    try {
+      const response = await adminFetch('/admin/content/session/generate-from-bank', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reference_image_url: prefillImageUrl,
+          brief_text: prefillBrief.trim(),
+          gender: prefillGender,
+          regular_count: regularCount,
+          erotic_count: eroticCount,
+        }),
+      })
+      const data = await response.json()
+      const session = data.session || {}
+      const groups = Array.isArray(session.prompt_groups) ? session.prompt_groups : []
+      setContentSessionId(session.session_id || '')
+      setContentPromptGroups(groups)
+      setContentSelection({})
+      setStatus(`Запущено из банка: ${groups.length}. Картинки будут появляться ниже.`)
+      pollContentSession(session.session_id, 1000)
+    } catch (error) {
+      setStatus(`Ошибка генерации из банка: ${error.message}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const startKlingForPrompt = async (promptId) => {
     if (!contentSessionId) {
       setStatus('Сначала создай контент-сессию')
@@ -1235,7 +1382,14 @@ function App() {
   const toggleGeneratedSelection = (promptId, url, target) => {
     const key = `${promptId}|||${url}`
     setContentSelection((prev) => {
-      const current = prev[key] || { story: false, chat: false, profile: false, is_adult: false, is_paid: false }
+      const group = contentPromptGroups.find((item) => item.id === promptId)
+      const current = prev[key] || {
+        story: false,
+        chat: false,
+        profile: false,
+        is_adult: Boolean(group?.is_adult),
+        is_paid: false,
+      }
       const nextItem = { ...current, [target]: !current[target] }
       return { ...prev, [key]: nextItem }
     })
@@ -1244,7 +1398,14 @@ function App() {
   const toggleGeneratedFlag = (promptId, url, flag) => {
     const key = `${promptId}|||${url}`
     setContentSelection((prev) => {
-      const current = prev[key] || { story: false, chat: false, profile: false, is_adult: false, is_paid: false }
+      const group = contentPromptGroups.find((item) => item.id === promptId)
+      const current = prev[key] || {
+        story: false,
+        chat: false,
+        profile: false,
+        is_adult: Boolean(group?.is_adult),
+        is_paid: false,
+      }
       return { ...prev, [key]: { ...current, [flag]: !current[flag] } }
     })
   }
@@ -1501,6 +1662,13 @@ function App() {
             </button>
             <button
               type="button"
+              className={mainTab === 'modelContentBank' ? 'topTab active' : 'topTab'}
+              onClick={() => setMainTab('modelContentBank')}
+            >
+              Контент фото моделей
+            </button>
+            <button
+              type="button"
               className={mainTab === 'banners' ? 'topTab active' : 'topTab'}
               onClick={() => setMainTab('banners')}
             >
@@ -1648,6 +1816,9 @@ function App() {
 
       {mainTab === 'posts' && <FeedPostsTab adminFetch={adminFetch} isActive={mainTab === 'posts'} />}
       {mainTab === 'content' && <ContentModerationTab adminFetch={adminFetch} isActive={mainTab === 'content'} />}
+      {mainTab === 'modelContentBank' && (
+        <ModelContentBankTab adminFetch={adminFetch} isActive={mainTab === 'modelContentBank'} />
+      )}
       {mainTab === 'banners' && <BannersTab adminFetch={adminFetch} isActive={mainTab === 'banners'} />}
       {mainTab === 'settings' && <ContentSettingsTab adminFetch={adminFetch} isActive={mainTab === 'settings'} />}
 
@@ -1724,6 +1895,40 @@ function App() {
 
           <section className="card prefillCard">
             <h2>Генерация контента для модели</h2>
+            <div className="bankGenerateBox">
+              <h3>Новый flow: сгенерировать из банка промтов</h3>
+              <p className="fieldHint">
+                Для женщин и anime берутся женские группы. Для мужчин — мужские. Erotic картинки автоматически помечаются
+                adult при отправке контента.
+              </p>
+              <div className="miniRow">
+                <label>
+                  Обычных фото
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={bankRegularCount}
+                    onChange={(event) => setBankRegularCount(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Erotic фото
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={bankEroticCount}
+                    onChange={(event) => setBankEroticCount(event.target.value)}
+                  />
+                </label>
+              </div>
+              <button disabled={isLoading || !prefillImageUrl} onClick={generateContentFromBank}>
+                Сгенерировать из банка
+              </button>
+            </div>
+            <hr />
+            <h3>Старый flow: загрузить фото вручную</h3>
             <label>Фото для промтов (1-{CONTENT_MAX_FILES} шт, jpg/png/webp, до 10MB)</label>
             <div className="pasteZone" onPaste={onPasteContentPhotos} tabIndex={0}>
               Нажми сюда и вставь фотографии через Ctrl+V или выбери файлы ниже
@@ -1779,7 +1984,7 @@ function App() {
                             story: false,
                             chat: false,
                             profile: false,
-                            is_adult: false,
+                            is_adult: Boolean(group.is_adult),
                             is_paid: false,
                           }
                           return (
