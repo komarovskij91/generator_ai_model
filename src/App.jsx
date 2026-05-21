@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import FeedPostsTab from './FeedPostsTab'
 
@@ -11,6 +11,7 @@ const CONTENT_MIN_FILES = 1
 const CONTENT_MAX_FILE_BYTES = 10 * 1024 * 1024
 const CONTENT_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const CONTENT_ACTIVE_STATUSES = new Set(['prompt_queued', 'prompt_running', 'queued', 'running', 'prompting'])
+const CONTENT_VIDEO_ACTIVE_STATUSES = new Set(['queued', 'prompting', 'running'])
 const GENDER_OPTIONS = [
   { value: 'female', label: 'женщина' },
   { value: 'male', label: 'мужчина' },
@@ -588,7 +589,25 @@ function ContentModerationTab({ adminFetch, isActive }) {
   const [content, setContent] = useState(null)
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
+  const [startingVideoUrl, setStartingVideoUrl] = useState('')
+  const [applyingVideoJobId, setApplyingVideoJobId] = useState('')
   const [videoApplySelection, setVideoApplySelection] = useState({})
+  const pollTimeoutRef = useRef(null)
+
+  const visibleSections = useMemo(
+    () => (content?.sections || []).filter((section) => section.id !== 'generated_groups'),
+    [content?.sections]
+  )
+
+  const activeVideoImageUrls = useMemo(() => {
+    const urls = new Set()
+    for (const job of content?.video_jobs || []) {
+      if (CONTENT_VIDEO_ACTIVE_STATUSES.has(job.status) && job.image_url) {
+        urls.add(job.image_url)
+      }
+    }
+    return urls
+  }, [content?.video_jobs])
 
   const loadModels = useCallback(async () => {
     const response = await adminFetch('/admin/models')
@@ -598,22 +617,28 @@ function ContentModerationTab({ adminFetch, isActive }) {
     if (!selectedModelId && items[0]?.id) setSelectedModelId(items[0].id)
   }, [adminFetch, selectedModelId])
 
-  const loadContent = useCallback(async (modelId = selectedModelId) => {
+  const loadContent = useCallback(async (modelId = selectedModelId, { silent = false } = {}) => {
     if (!modelId) return
-    setBusy(true)
+    if (!silent) setBusy(true)
     try {
       const response = await adminFetch(`/admin/models/${encodeURIComponent(modelId)}/content`)
       const data = await response.json()
       setContent(data)
-      setStatus('Контент модели загружен')
-      const hasActiveVideo = (data.video_jobs || []).some((job) => ['queued', 'prompting', 'running'].includes(job.status))
+      if (!silent) setStatus('Контент модели загружен')
+      const hasActiveVideo = (data.video_jobs || []).some((job) => CONTENT_VIDEO_ACTIVE_STATUSES.has(job.status))
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current)
+        pollTimeoutRef.current = null
+      }
       if (hasActiveVideo) {
-        setTimeout(() => loadContent(modelId), 3500)
+        pollTimeoutRef.current = setTimeout(() => {
+          loadContent(modelId, { silent: true })
+        }, 3500)
       }
     } catch (error) {
-      setStatus(`Ошибка загрузки контента: ${error.message}`)
+      if (!silent) setStatus(`Ошибка загрузки контента: ${error.message}`)
     } finally {
-      setBusy(false)
+      if (!silent) setBusy(false)
     }
   }, [adminFetch, selectedModelId])
 
@@ -626,6 +651,19 @@ function ContentModerationTab({ adminFetch, isActive }) {
     if (!isActive || !selectedModelId) return
     loadContent(selectedModelId)
   }, [isActive, selectedModelId, loadContent])
+
+  useEffect(() => {
+    if (isActive) return undefined
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current)
+      pollTimeoutRef.current = null
+    }
+    return undefined
+  }, [isActive])
+
+  useEffect(() => () => {
+    if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current)
+  }, [])
 
   const mediaFlagsFor = (url) => content?.media_flags?.[url] || {}
 
@@ -710,7 +748,7 @@ function ContentModerationTab({ adminFetch, isActive }) {
 
   const startContentVideo = async (imageUrl) => {
     if (!content?.model_id) return
-    setBusy(true)
+    setStartingVideoUrl(imageUrl)
     setStatus('Запускаю генерацию видео…')
     try {
       await adminFetch(`/admin/models/${encodeURIComponent(content.model_id)}/content-video/start`, {
@@ -719,11 +757,11 @@ function ContentModerationTab({ adminFetch, isActive }) {
         body: JSON.stringify({ image_url: imageUrl }),
       })
       setStatus('Видео-задача запущена')
-      loadContent(content.model_id)
+      loadContent(content.model_id, { silent: true })
     } catch (error) {
       setStatus(`Видео: ${error.message}`)
     } finally {
-      setBusy(false)
+      setStartingVideoUrl('')
     }
   }
 
@@ -744,7 +782,7 @@ function ContentModerationTab({ adminFetch, isActive }) {
       setStatus('Отметь, куда сохранить видео: сторис или чат')
       return
     }
-    setBusy(true)
+    setApplyingVideoJobId(job.id)
     setStatus('Сохраняю видео в модель…')
     try {
       await adminFetch(`/admin/models/${encodeURIComponent(content.model_id)}/content-video/${encodeURIComponent(job.id)}/apply`, {
@@ -758,11 +796,11 @@ function ContentModerationTab({ adminFetch, isActive }) {
       })
       setStatus('Видео сохранено в модель')
       setVideoApplySelection((prev) => ({ ...prev, [job.id]: { story: false, chat: false, is_adult: false, is_paid: false } }))
-      loadContent(content.model_id)
+      loadContent(content.model_id, { silent: true })
     } catch (error) {
       setStatus(`Сохранение видео: ${error.message}`)
     } finally {
-      setBusy(false)
+      setApplyingVideoJobId('')
     }
   }
 
@@ -841,7 +879,7 @@ function ContentModerationTab({ adminFetch, isActive }) {
                     <input type="checkbox" checked={selected.is_paid} disabled={!videoUrl} onChange={() => toggleVideoApply(job.id, 'is_paid')} />
                     <span>Платный</span>
                   </label>
-                  <button type="button" disabled={busy || !canSave} onClick={() => applyContentVideo(job)}>
+                  <button type="button" disabled={applyingVideoJobId === job.id || !canSave} onClick={() => applyContentVideo(job)}>
                     Сохранить видео в модель
                   </button>
                   {job.error ? <small className="fieldHint">Ошибка: {String(job.error)}</small> : null}
@@ -852,13 +890,14 @@ function ContentModerationTab({ adminFetch, isActive }) {
         </section>
       ) : null}
 
-      {content?.sections?.map((section) => (
+      {visibleSections.map((section) => (
         <section className="card" key={section.id}>
           <h3>{section.title}</h3>
           {section.items?.length ? (
             <div className="moderationGrid">
               {section.items.map((item) => {
                 const flags = mediaFlagsFor(item.url)
+                const videoBusy = startingVideoUrl === item.url || activeVideoImageUrls.has(item.url)
                 return (
                   <article className="moderationCard" key={`${section.id}-${item.group_id || ''}-${item.url}`}>
                     {item.kind === 'video' ? (
@@ -868,8 +907,8 @@ function ContentModerationTab({ adminFetch, isActive }) {
                     )}
                     {item.group_id ? <small className="fieldHint">group: {item.group_id}</small> : null}
                     {item.kind === 'image' ? (
-                      <button type="button" disabled={busy} onClick={() => startContentVideo(item.url)}>
-                        Сгенерировать видео
+                      <button type="button" disabled={videoBusy} onClick={() => startContentVideo(item.url)}>
+                        {videoBusy ? 'Видео генерируется…' : 'Сгенерировать видео'}
                       </button>
                     ) : null}
                     {(section.id === 'story_images' || section.id === 'story_videos') && (
