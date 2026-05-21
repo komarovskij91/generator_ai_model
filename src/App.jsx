@@ -888,6 +888,13 @@ function App() {
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }))
   const dedupe = (items) => Array.from(new Set((items || []).filter(Boolean)))
+  const contentReferenceImageUrl = () =>
+    prefillImageUrl ||
+    form.avatarUrl ||
+    form.coverUrl ||
+    form.profileImageUrls?.[0] ||
+    form.storyImageUrls?.[0] ||
+    ''
   const toggleArray = (field, value) =>
     setForm((prev) => {
       const exists = prev[field].includes(value)
@@ -1058,8 +1065,20 @@ function App() {
     try {
       const response = await adminFetch(`/admin/models/${encodeURIComponent(id)}`)
       const doc = await response.json()
-      setForm(formFromRedisModel(doc))
+      const loadedForm = formFromRedisModel(doc)
+      setForm(loadedForm)
       setEditingModelId(id)
+      setPrefillImageUrl(
+        loadedForm.avatarUrl ||
+        loadedForm.coverUrl ||
+        loadedForm.profileImageUrls?.[0] ||
+        loadedForm.storyImageUrls?.[0] ||
+        ''
+      )
+      setPrefillGender(loadedForm.gender || 'female')
+      setContentSessionId('')
+      setContentPromptGroups([])
+      setContentSelection({})
       setStatus(`Загружена модель ${id}. Можно править поля и медиа ниже.`)
     } catch (error) {
       setStatus(`Ошибка загрузки модели: ${error.message}`)
@@ -1072,6 +1091,10 @@ function App() {
     setEditingModelId(null)
     setEditorSelectedId('')
     setForm({ ...defaultForm })
+    setPrefillImageUrl('')
+    setContentSessionId('')
+    setContentPromptGroups([])
+    setContentSelection({})
     setStatus('Форма редактора сброшена')
   }
 
@@ -1315,8 +1338,13 @@ function App() {
   }
 
   const generateContentFromBank = async () => {
-    if (!prefillImageUrl) {
-      setStatus('Сначала добавь 1 фото-референс в предгенерации')
+    const referenceImageUrl = contentReferenceImageUrl()
+    if (!referenceImageUrl) {
+      setStatus(
+        mainTab === 'editor'
+          ? 'У загруженной модели нет avatar/cover/profile/story фото для референса'
+          : 'Сначала добавь 1 фото-референс в предгенерации'
+      )
       return
     }
     const regularCount = Math.max(0, Number(bankRegularCount) || 0)
@@ -1332,10 +1360,10 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          reference_image_url: prefillImageUrl,
+          reference_image_url: referenceImageUrl,
           session_id: contentSessionId || null,
-          brief_text: prefillBrief.trim(),
-          gender: prefillGender,
+          brief_text: prefillBrief.trim() || form.nameRu || form.nameEn || form.slug,
+          gender: mainTab === 'editor' ? form.gender : prefillGender,
           regular_count: regularCount,
           erotic_count: eroticCount,
         }),
@@ -1606,6 +1634,68 @@ function App() {
     localStorage.removeItem(CONTENT_DRAFT_KEY)
   }
 
+  const contentPromptReviewBlock = !!contentPromptGroups.length && (
+    <>
+      <div className="contentPromptList">
+        {contentPromptGroups.map((group) => (
+          <article key={group.id} className="contentPromptCard">
+            <div className="miniRow">
+              <strong>Промт {Number(group.index || 0) + 1}</strong>
+              <span>{group.status_ru || '—'}</span>
+            </div>
+            <p>{group.prompt_ru || group.prompt}</p>
+            {(group.description_ru || group.description_en || group.topics?.length || group.outfit?.length || group.location || group.mood?.length || group.shot_type) && (
+              <div className="fieldHint">
+                {group.description_ru && <div><strong>Описание RU:</strong> {group.description_ru}</div>}
+                {group.description_en && <div><strong>Description EN:</strong> {group.description_en}</div>}
+                {!!group.topics?.length && <div><strong>topics:</strong> {group.topics.join(', ')}</div>}
+                {!!group.outfit?.length && <div><strong>outfit:</strong> {group.outfit.join(', ')}</div>}
+                {group.location && <div><strong>location:</strong> {group.location}</div>}
+                {!!group.mood?.length && <div><strong>mood:</strong> {group.mood.join(', ')}</div>}
+                {group.shot_type && <div><strong>shot_type:</strong> {group.shot_type}</div>}
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={isLoading || CONTENT_ACTIVE_STATUSES.has(group.status) || !(group.prompt_ru || group.prompt)}
+              onClick={() => startKlingForPrompt(group.id)}
+            >
+              Сгенерировать контент
+            </button>
+            {!!group.kling_output_urls?.length && (
+              <div className="generatedGrid">
+                {group.kling_output_urls.map((url) => {
+                  const key = `${group.id}|||${url}`
+                  const checked = contentSelection[key] || {
+                    story: false,
+                    chat: false,
+                    profile: false,
+                    is_adult: Boolean(group.is_adult),
+                    is_paid: false,
+                  }
+                  return (
+                    <div key={url} className="generatedItem">
+                      <img src={url} alt="generated" />
+                      <label><input type="checkbox" checked={checked.story} onChange={() => toggleGeneratedSelection(group.id, url, 'story')} /> сторис</label>
+                      <label><input type="checkbox" checked={checked.chat} onChange={() => toggleGeneratedSelection(group.id, url, 'chat')} /> фото для чата</label>
+                      <label><input type="checkbox" checked={checked.profile} onChange={() => toggleGeneratedSelection(group.id, url, 'profile')} /> фото для профиля</label>
+                      <label><input type="checkbox" checked={checked.is_adult} onChange={() => toggleGeneratedFlag(group.id, url, 'is_adult')} /> эротика</label>
+                      <label><input type="checkbox" checked={checked.is_paid} onChange={() => toggleGeneratedFlag(group.id, url, 'is_paid')} /> платный</label>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {group.error && <small className="fieldHint">Ошибка: {String(group.error)}</small>}
+          </article>
+        ))}
+      </div>
+      <button disabled={isLoading || !contentPromptGroups.length} onClick={applyGeneratedMedia}>
+        Применить (R2 + Payload)
+      </button>
+    </>
+  )
+
   if (!isAuthed) {
     return (
       <main className="page">
@@ -1861,6 +1951,48 @@ function App() {
               Редактируется <code>{editingModelId}</code> — внизу вкладки заполните блоки «База», «Тексты», «Media». Сохранение: кнопка в Preview или добавьте через форму (перейдите в Preview).
             </p>
           ) : null}
+        </section>
+      )}
+
+      {mainTab === 'editor' && step === 'form' && editingModelId && (
+        <section className="card prefillCard">
+          <h2>Генерация контента для модели</h2>
+          <div className="bankGenerateBox">
+            <h3>Сгенерировать новые фото из банка промтов</h3>
+            <p className="fieldHint">
+              Новые картинки добавятся к текущей content-сессии этой модели. После генерации отметьте нужные фото ниже,
+              нажмите apply, затем перейдите в Preview и сохраните модель.
+            </p>
+            <p className="fieldHint">
+              Референс: <code>{contentReferenceImageUrl() || 'нет фото-референса'}</code>
+            </p>
+            <div className="miniRow">
+              <label>
+                Обычных фото
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={bankRegularCount}
+                  onChange={(event) => setBankRegularCount(event.target.value)}
+                />
+              </label>
+              <label>
+                Erotic фото
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={bankEroticCount}
+                  onChange={(event) => setBankEroticCount(event.target.value)}
+                />
+              </label>
+            </div>
+            <button disabled={isLoading || !contentReferenceImageUrl()} onClick={generateContentFromBank}>
+              Сгенерировать из банка
+            </button>
+          </div>
+          {contentPromptReviewBlock}
         </section>
       )}
 
