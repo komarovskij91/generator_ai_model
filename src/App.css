@@ -211,6 +211,23 @@ pre {
   border-radius: 8px;
 }
 
+.generatedVideoItem {
+  border-top: 1px solid #e5e7eb;
+  margin-top: 6px;
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.generatedVideoItem video {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #111827;
+}
+
 .bankGenerateBox {
   border: 1px solid #e5e7eb;
   border-radius: 10px;

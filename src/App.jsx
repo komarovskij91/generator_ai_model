@@ -10,7 +10,7 @@ const CONTENT_MAX_FILES = 200
 const CONTENT_MIN_FILES = 1
 const CONTENT_MAX_FILE_BYTES = 10 * 1024 * 1024
 const CONTENT_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
-const CONTENT_ACTIVE_STATUSES = new Set(['prompt_queued', 'prompt_running', 'queued', 'running'])
+const CONTENT_ACTIVE_STATUSES = new Set(['prompt_queued', 'prompt_running', 'queued', 'running', 'prompting'])
 const GENDER_OPTIONS = [
   { value: 'female', label: 'женщина' },
   { value: 'male', label: 'мужчина' },
@@ -1299,7 +1299,10 @@ function App() {
       const data = await response.json()
       const groups = Array.isArray(data.prompt_groups) ? data.prompt_groups : []
       setContentPromptGroups(groups)
-      const hasActive = groups.some((item) => CONTENT_ACTIVE_STATUSES.has(item.status))
+      const hasActive = groups.some((item) =>
+        CONTENT_ACTIVE_STATUSES.has(item.status) ||
+        (item.video_jobs || []).some((job) => CONTENT_ACTIVE_STATUSES.has(job.status))
+      )
       if (hasActive) {
         setTimeout(() => {
           pollContentSession(sessionId, attempts - 1)
@@ -1402,40 +1405,63 @@ function App() {
     }
   }
 
+  const startVideoForGeneratedImage = async (promptId, imageUrl) => {
+    if (!contentSessionId) {
+      setStatus('Сначала создай контент-сессию')
+      return
+    }
+    setIsLoading(true)
+    try {
+      await adminFetch(`/admin/content/session/${contentSessionId}/video/${promptId}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_url: imageUrl }),
+      })
+      setStatus('Видео-задача запущена')
+      pollContentSession(contentSessionId, 1000)
+    } catch (error) {
+      setStatus(`Ошибка запуска видео: ${error.message}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!isAuthed || !contentSessionId) return
     pollContentSession(contentSessionId, 1000)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthed, contentSessionId])
 
-  const toggleGeneratedSelection = (promptId, url, target) => {
+  const toggleGeneratedSelection = (promptId, url, target, kind = 'image') => {
     const key = `${promptId}|||${url}`
     setContentSelection((prev) => {
       const group = contentPromptGroups.find((item) => item.id === promptId)
       const current = prev[key] || {
+        kind,
         story: false,
         chat: false,
-        profile: false,
+        profile: kind === 'video' ? false : false,
         is_adult: Boolean(group?.is_adult),
         is_paid: false,
       }
-      const nextItem = { ...current, [target]: !current[target] }
+      const nextItem = { ...current, kind, [target]: !current[target] }
       return { ...prev, [key]: nextItem }
     })
   }
 
-  const toggleGeneratedFlag = (promptId, url, flag) => {
+  const toggleGeneratedFlag = (promptId, url, flag, kind = 'image') => {
     const key = `${promptId}|||${url}`
     setContentSelection((prev) => {
       const group = contentPromptGroups.find((item) => item.id === promptId)
       const current = prev[key] || {
+        kind,
         story: false,
         chat: false,
-        profile: false,
+        profile: kind === 'video' ? false : false,
         is_adult: Boolean(group?.is_adult),
         is_paid: false,
       }
-      return { ...prev, [key]: { ...current, [flag]: !current[flag] } }
+      return { ...prev, [key]: { ...current, kind, [flag]: !current[flag] } }
     })
   }
 
@@ -1454,6 +1480,7 @@ function App() {
         return {
           prompt_id: promptId,
           url,
+          kind: flags.kind || 'image',
           targets,
           is_adult: Boolean(flags.is_adult),
           is_paid: Boolean(flags.is_paid),
@@ -1482,7 +1509,9 @@ function App() {
       setForm((prev) => ({
         ...prev,
         storyImageUrls: dedupe([...(prev.storyImageUrls || []), ...(media.story_image_urls || [])]),
+        storyVideoUrls: dedupe([...(prev.storyVideoUrls || []), ...(media.story_video_urls || [])]),
         chatImageUrls: dedupe([...(prev.chatImageUrls || []), ...(media.chat_image_urls || [])]),
+        chatVideoUrls: dedupe([...(prev.chatVideoUrls || []), ...(media.chat_video_urls || [])]),
         profileImageUrls: dedupe([...(prev.profileImageUrls || []), ...(media.profile_image_urls || [])]),
         mediaFlags: { ...(prev.mediaFlags || {}), ...mediaFlags },
         generatedMediaGroups: patch.generated_media_groups || prev.generatedMediaGroups,
@@ -1667,12 +1696,14 @@ function App() {
                 {group.kling_output_urls.map((url) => {
                   const key = `${group.id}|||${url}`
                   const checked = contentSelection[key] || {
+                    kind: 'image',
                     story: false,
                     chat: false,
                     profile: false,
                     is_adult: Boolean(group.is_adult),
                     is_paid: false,
                   }
+                  const videoJobs = (group.video_jobs || []).filter((job) => job.image_url === url)
                   return (
                     <div key={url} className="generatedItem">
                       <img src={url} alt="generated" />
@@ -1681,6 +1712,40 @@ function App() {
                       <label><input type="checkbox" checked={checked.profile} onChange={() => toggleGeneratedSelection(group.id, url, 'profile')} /> фото для профиля</label>
                       <label><input type="checkbox" checked={checked.is_adult} onChange={() => toggleGeneratedFlag(group.id, url, 'is_adult')} /> эротика</label>
                       <label><input type="checkbox" checked={checked.is_paid} onChange={() => toggleGeneratedFlag(group.id, url, 'is_paid')} /> платный</label>
+                      <button
+                        type="button"
+                        disabled={isLoading || videoJobs.some((job) => ['queued', 'prompting', 'running'].includes(job.status))}
+                        onClick={() => startVideoForGeneratedImage(group.id, url)}
+                      >
+                        Сгенерировать видео
+                      </button>
+                      {videoJobs.map((job) => {
+                        const videoUrl = job.video_url || job.video_urls?.[0]
+                        const videoKey = `${group.id}|||${videoUrl || job.id}`
+                        const videoChecked = contentSelection[videoKey] || {
+                          kind: 'video',
+                          story: false,
+                          chat: false,
+                          profile: false,
+                          is_adult: Boolean(group.is_adult),
+                          is_paid: false,
+                        }
+                        return (
+                          <div key={job.id} className="generatedVideoItem">
+                            <small className="fieldHint">Видео: {job.status_ru || job.status}</small>
+                            {videoUrl ? (
+                              <>
+                                <video src={videoUrl} controls muted playsInline />
+                                <label><input type="checkbox" checked={videoChecked.story} onChange={() => toggleGeneratedSelection(group.id, videoUrl, 'story', 'video')} /> видео в сторис</label>
+                                <label><input type="checkbox" checked={videoChecked.chat} onChange={() => toggleGeneratedSelection(group.id, videoUrl, 'chat', 'video')} /> видео для чата</label>
+                                <label><input type="checkbox" checked={videoChecked.is_adult} onChange={() => toggleGeneratedFlag(group.id, videoUrl, 'is_adult', 'video')} /> эротика</label>
+                                <label><input type="checkbox" checked={videoChecked.is_paid} onChange={() => toggleGeneratedFlag(group.id, videoUrl, 'is_paid', 'video')} /> платный</label>
+                              </>
+                            ) : null}
+                            {job.error && <small className="fieldHint">Ошибка видео: {String(job.error)}</small>}
+                          </div>
+                        )
+                      })}
                     </div>
                   )
                 })}
@@ -2114,12 +2179,14 @@ function App() {
                         {group.kling_output_urls.map((url) => {
                           const key = `${group.id}|||${url}`
                           const checked = contentSelection[key] || {
+                            kind: 'image',
                             story: false,
                             chat: false,
                             profile: false,
                             is_adult: Boolean(group.is_adult),
                             is_paid: false,
                           }
+                          const videoJobs = (group.video_jobs || []).filter((job) => job.image_url === url)
                           return (
                             <div key={url} className="generatedItem">
                               <img src={url} alt="generated" />
@@ -2128,6 +2195,40 @@ function App() {
                               <label><input type="checkbox" checked={checked.profile} onChange={() => toggleGeneratedSelection(group.id, url, 'profile')} /> фото для профиля</label>
                               <label><input type="checkbox" checked={checked.is_adult} onChange={() => toggleGeneratedFlag(group.id, url, 'is_adult')} /> эротика</label>
                               <label><input type="checkbox" checked={checked.is_paid} onChange={() => toggleGeneratedFlag(group.id, url, 'is_paid')} /> платный</label>
+                              <button
+                                type="button"
+                                disabled={isLoading || videoJobs.some((job) => ['queued', 'prompting', 'running'].includes(job.status))}
+                                onClick={() => startVideoForGeneratedImage(group.id, url)}
+                              >
+                                Сгенерировать видео
+                              </button>
+                              {videoJobs.map((job) => {
+                                const videoUrl = job.video_url || job.video_urls?.[0]
+                                const videoKey = `${group.id}|||${videoUrl || job.id}`
+                                const videoChecked = contentSelection[videoKey] || {
+                                  kind: 'video',
+                                  story: false,
+                                  chat: false,
+                                  profile: false,
+                                  is_adult: Boolean(group.is_adult),
+                                  is_paid: false,
+                                }
+                                return (
+                                  <div key={job.id} className="generatedVideoItem">
+                                    <small className="fieldHint">Видео: {job.status_ru || job.status}</small>
+                                    {videoUrl ? (
+                                      <>
+                                        <video src={videoUrl} controls muted playsInline />
+                                        <label><input type="checkbox" checked={videoChecked.story} onChange={() => toggleGeneratedSelection(group.id, videoUrl, 'story', 'video')} /> видео в сторис</label>
+                                        <label><input type="checkbox" checked={videoChecked.chat} onChange={() => toggleGeneratedSelection(group.id, videoUrl, 'chat', 'video')} /> видео для чата</label>
+                                        <label><input type="checkbox" checked={videoChecked.is_adult} onChange={() => toggleGeneratedFlag(group.id, videoUrl, 'is_adult', 'video')} /> эротика</label>
+                                        <label><input type="checkbox" checked={videoChecked.is_paid} onChange={() => toggleGeneratedFlag(group.id, videoUrl, 'is_paid', 'video')} /> платный</label>
+                                      </>
+                                    ) : null}
+                                    {job.error && <small className="fieldHint">Ошибка видео: {String(job.error)}</small>}
+                                  </div>
+                                )
+                              })}
                             </div>
                           )
                         })}
