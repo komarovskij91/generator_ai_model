@@ -1753,7 +1753,16 @@ function App() {
         })
         const data = await response.json()
         const mobileUrl = data?.model?.story_media?.avatar_video_mobile_url || ''
-        setStatus(mobileUrl ? 'Модель создана. Mini avatar video создан.' : 'Модель создана')
+        const voiceSync = data?.voice_sync === 'started'
+        if (mobileUrl && voiceSync) {
+          setStatus('Модель создана. Mini avatar video создан. Озвучка запускается на всех языках…')
+        } else if (mobileUrl) {
+          setStatus('Модель создана. Mini avatar video создан.')
+        } else if (voiceSync) {
+          setStatus('Модель создана. Озвучка запускается на всех языках…')
+        } else {
+          setStatus('Модель создана')
+        }
         setForm(defaultForm)
         setPrefillImageUrl('')
         setPrefillBrief('')
