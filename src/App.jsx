@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import FeedPostsTab from './FeedPostsTab'
-import VoiceCallTestTab from './VoiceCallTestTab'
+import VoiceCallDraftSection from './VoiceCallDraftSection'
+
+const createVoiceCallSessionId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID().replace(/-/g, '')
+  }
+  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`
+}
 
 const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL || 'https://web-production-c51d.up.railway.app'
@@ -144,6 +151,8 @@ const defaultForm = {
   tabooTopics: '',
   systemPromptCore: '',
   avatarUrl: '',
+  voiceCallImageUrl: '',
+  voiceCallVideoUrl: '',
   avatarVideoUrl: '',
   avatarVideoMobileUrl: '',
   coverUrl: '',
@@ -196,6 +205,8 @@ const modelDataFromForm = (form) => ({
   allowed_topics: splitList(form.allowedTopics),
   taboo_topics: splitList(form.tabooTopics),
   system_prompt_core: form.systemPromptCore,
+  voice_call_image_url: form.voiceCallImageUrl || null,
+  voice_call_video_url: form.voiceCallVideoUrl || null,
   story_media: {
     avatar_url: form.avatarUrl || null,
     avatar_video_url: form.avatarVideoUrl || null,
@@ -273,6 +284,8 @@ const formFromRedisModel = (doc) => {
     tabooTopics: Array.isArray(doc.taboo_topics) ? doc.taboo_topics.join(', ') : '',
     systemPromptCore: doc.system_prompt_core || '',
     avatarUrl: sm.avatar_url || doc.avatar_url || '',
+    voiceCallImageUrl: doc.voice_call_image_url || '',
+    voiceCallVideoUrl: doc.voice_call_video_url || '',
     avatarVideoUrl: sm.avatar_video_url || '',
     avatarVideoMobileUrl: sm.avatar_video_mobile_url || '',
     coverUrl: sm.cover_url || '',
@@ -1028,6 +1041,9 @@ function App() {
     () => JSON.parse(localStorage.getItem(CONTENT_DRAFT_KEY) || '{}').contentSelection || {}
   )
   const [pastedContentFiles, setPastedContentFiles] = useState([])
+  const [voiceCallDraftSessionId, setVoiceCallDraftSessionId] = useState(
+    () => readJsonStorage(FORM_DRAFT_KEY).voiceCallDraftSessionId || createVoiceCallSessionId()
+  )
   const [bankRegularCount, setBankRegularCount] = useState(20)
   const [bankEroticCount, setBankEroticCount] = useState(20)
   const previewModel = useMemo(() => modelDataFromForm(form), [form])
@@ -1289,7 +1305,12 @@ function App() {
     try {
       const url = await uploadMedia(file, mediaKind)
       if (!url) return
-      if (mediaKind === 'avatar') setField('avatarUrl', url)
+      if (mediaKind === 'avatar') {
+        setField('avatarUrl', url)
+        setField('voiceCallImageUrl', '')
+        setField('voiceCallVideoUrl', '')
+        setVoiceCallDraftSessionId(createVoiceCallSessionId())
+      }
       if (mediaKind === 'avatar_video') setField('avatarVideoUrl', url)
       if (mediaKind === 'cover') setField('coverUrl', url)
     } finally {
@@ -1394,7 +1415,22 @@ function App() {
       })
       const data = await response.json()
       const patch = normalizePrefillPatch(data.prefill || {})
-      setForm((prev) => ({ ...prev, ...patch, avatarUrl: prev.avatarUrl || prefillImageUrl || '' }))
+      const nextAvatar = prefillImageUrl || ''
+      let shouldResetVoiceCall = false
+      setForm((prev) => {
+        const avatarUrl = prev.avatarUrl || nextAvatar || ''
+        shouldResetVoiceCall = !prev.avatarUrl && Boolean(avatarUrl)
+        return {
+          ...prev,
+          ...patch,
+          avatarUrl,
+          voiceCallImageUrl: shouldResetVoiceCall ? '' : prev.voiceCallImageUrl,
+          voiceCallVideoUrl: shouldResetVoiceCall ? '' : prev.voiceCallVideoUrl,
+        }
+      })
+      if (shouldResetVoiceCall) {
+        setVoiceCallDraftSessionId(createVoiceCallSessionId())
+      }
       await ensureContentSession()
       setStatus('Черновик заполнен')
     } catch (error) {
@@ -1724,6 +1760,10 @@ function App() {
       setStatus('Заполни обязательные поля: name_ru, slug, system_prompt_core, avatar')
       return
     }
+    if (!editingModelId && (!form.voiceCallImageUrl || !form.voiceCallVideoUrl)) {
+      setStatus('Дождись аватар для звонка: 3 фото → видео → загрузка в R2')
+      return
+    }
     if (!form.archetypeKeys.length || form.interestKeys.length < 3) {
       setStatus('Выбери минимум 1 типаж и минимум 3 интереса')
       return
@@ -1765,6 +1805,7 @@ function App() {
           setStatus('Модель создана')
         }
         setForm(defaultForm)
+        setVoiceCallDraftSessionId(createVoiceCallSessionId())
         setPrefillImageUrl('')
         setPrefillBrief('')
         setPastedContentFiles([])
@@ -1804,16 +1845,18 @@ function App() {
         prefillBrief,
         prefillImageUrl,
         prefillGender,
+        voiceCallDraftSessionId,
         step,
       })
     )
-  }, [form, prefillBrief, prefillImageUrl, prefillGender, step])
+  }, [form, prefillBrief, prefillImageUrl, prefillGender, voiceCallDraftSessionId, step])
 
   const resetAllDraftData = () => {
     const confirmed = window.confirm('Сбросить все заполненные данные и начать новую генерацию?')
     if (!confirmed) return
     setForm(defaultForm)
     setStep('form')
+    setVoiceCallDraftSessionId(createVoiceCallSessionId())
     setStatus('')
     setPrefillBrief('')
     setPrefillImageUrl('')
@@ -1995,13 +2038,6 @@ function App() {
             </button>
             <button
               type="button"
-              className={mainTab === 'voiceCallTest' ? 'topTab active' : 'topTab'}
-              onClick={() => setMainTab('voiceCallTest')}
-            >
-              Звонок (тест)
-            </button>
-            <button
-              type="button"
               className={mainTab === 'settings' ? 'topTab active' : 'topTab'}
               onClick={() => setMainTab('settings')}
             >
@@ -2146,9 +2182,6 @@ function App() {
         <ModelContentBankTab adminFetch={adminFetch} isActive={mainTab === 'modelContentBank'} />
       )}
       {mainTab === 'banners' && <BannersTab adminFetch={adminFetch} isActive={mainTab === 'banners'} />}
-      {mainTab === 'voiceCallTest' && (
-        <VoiceCallTestTab adminFetch={adminFetch} isActive={mainTab === 'voiceCallTest'} />
-      )}
       {mainTab === 'settings' && <ContentSettingsTab adminFetch={adminFetch} isActive={mainTab === 'settings'} />}
 
       {mainTab === 'editor' && step === 'form' && (
@@ -2575,6 +2608,22 @@ function App() {
               <input type="file" accept="image/*" onChange={(e) => uploadSingleMedia(e.target.files?.[0], 'avatar')} />
               {form.avatarUrl && <a href={form.avatarUrl} target="_blank" rel="noreferrer">avatar url</a>}
               <small className="fieldHint">Главная картинка для stories и карточек.</small>
+              <VoiceCallDraftSection
+                adminFetch={adminFetch}
+                avatarUrl={form.avatarUrl}
+                modelSlug={form.slug || 'new_model'}
+                sessionId={voiceCallDraftSessionId}
+                voiceCallImageUrl={form.voiceCallImageUrl}
+                voiceCallVideoUrl={form.voiceCallVideoUrl}
+                disabled={isLoading || Boolean(editingModelId && form.voiceCallImageUrl && form.voiceCallVideoUrl)}
+                onFinalized={({ imageUrl, videoUrl }) => {
+                  setForm((prev) => ({
+                    ...prev,
+                    voiceCallImageUrl: imageUrl || '',
+                    voiceCallVideoUrl: videoUrl || '',
+                  }))
+                }}
+              />
               <label>Видео-аватар (`story_media.avatar_video_url`)</label>
               <input type="file" accept="video/*" onChange={(e) => uploadSingleMedia(e.target.files?.[0], 'avatar_video')} />
               {form.avatarVideoUrl && <a href={form.avatarVideoUrl} target="_blank" rel="noreferrer">avatar video url</a>}
