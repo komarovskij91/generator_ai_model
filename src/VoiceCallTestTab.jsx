@@ -6,63 +6,158 @@ function isActiveSection(section) {
   return ACTIVE_STATUSES.has(String(section?.status || ''))
 }
 
+function visiblePhotoUrls(item) {
+  const urls = Array.isArray(item?.photos?.urls) ? item.photos.urls : []
+  const videoSource = item?.video?.source_image_url
+  if (videoSource) {
+    return urls.filter((url) => url === videoSource)
+  }
+  return urls
+}
+
+function ModelVoiceCallBlock({ item, busyModelId, startingVideoKey, onStartVideo, onRegeneratePhotos, onRegenerateVideo, onApply }) {
+  const modelId = item.model_id
+  const photoUrls = visiblePhotoUrls(item)
+  const videoUrl = item?.video?.video_url || ''
+  const videoSource = item?.video?.source_image_url || ''
+  const photosBusy = isActiveSection(item?.photos)
+  const videoBusy = isActiveSection(item?.video)
+  const applyImageUrl = videoSource || photoUrls[0] || ''
+  const blockBusy = busyModelId === modelId
+
+  return (
+    <section className="card voiceCallModelBlock">
+      <div className="voiceCallModelHeader">
+        <h3>{item.model_name || modelId}</h3>
+        <span className="fieldHint">{modelId}</span>
+      </div>
+
+      <div className="miniRow">
+        <p className="fieldHint voiceCallStatusLine">
+          Фото: {item?.photos?.status_ru || '—'}
+          {item?.photos?.error ? ` · ${item.photos.error}` : ''}
+        </p>
+        <button type="button" disabled={blockBusy || photosBusy} onClick={() => onRegeneratePhotos(modelId)}>
+          Перегенерировать все 3
+        </button>
+      </div>
+
+      {photoUrls.length ? (
+        <div className="voiceCallPhotoGrid">
+          {photoUrls.map((url) => {
+            const isVideoSource = videoSource === url
+            const videoKey = `${modelId}:${url}`
+            return (
+              <article className="moderationCard voiceCallCard" key={url}>
+                <img className="voiceCallSquareMedia" src={url} alt="" />
+                {!videoSource ? (
+                  <button
+                    type="button"
+                    disabled={blockBusy || videoBusy || startingVideoKey === videoKey}
+                    onClick={() => onStartVideo(modelId, url)}
+                  >
+                    {startingVideoKey === videoKey ? 'Запуск…' : 'Сделать видео'}
+                  </button>
+                ) : null}
+                {isVideoSource && videoUrl ? (
+                  <span className="fieldHint">Выбрано для видео</span>
+                ) : null}
+              </article>
+            )
+          })}
+        </div>
+      ) : (
+        <p className="fieldHint">
+          {photosBusy ? 'Генерируем 3 фото…' : 'Фото ещё не готовы'}
+        </p>
+      )}
+
+      {(videoSource || videoUrl || videoBusy) && (
+        <div className="voiceCallVideoSection">
+          <div className="miniRow">
+            <p className="fieldHint voiceCallStatusLine">
+              Видео: {item?.video?.status_ru || '—'}
+              {item?.video?.error ? ` · ${item.video.error}` : ''}
+            </p>
+            <button
+              type="button"
+              disabled={blockBusy || videoBusy || !videoSource}
+              onClick={() => onRegenerateVideo(modelId, videoSource)}
+            >
+              Перегенерировать видео
+            </button>
+          </div>
+          {videoUrl ? (
+            <article className="moderationCard voiceCallCard voiceCallVideoCard">
+              <video className="voiceCallSquareMedia" src={videoUrl} controls muted playsInline />
+            </article>
+          ) : null}
+        </div>
+      )}
+
+      <div className="voiceCallApplyRow">
+        <button
+          type="button"
+          className="primaryAction"
+          disabled={blockBusy || !applyImageUrl || !videoUrl}
+          onClick={() => onApply(modelId, applyImageUrl, videoUrl)}
+        >
+          Применить к модели
+        </button>
+      </div>
+    </section>
+  )
+}
+
 export default function VoiceCallTestTab({ adminFetch, isActive }) {
-  const [models, setModels] = useState([])
-  const [selectedModelId, setSelectedModelId] = useState('')
-  const [state, setState] = useState(null)
+  const [items, setItems] = useState([])
+  const [batchStarted, setBatchStarted] = useState(false)
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
-  const [selectedPhotoUrl, setSelectedPhotoUrl] = useState('')
-  const [startingVideoUrl, setStartingVideoUrl] = useState('')
+  const [busyModelId, setBusyModelId] = useState('')
+  const [startingVideoKey, setStartingVideoKey] = useState('')
+  const [activeJobs, setActiveJobs] = useState(0)
   const pollTimeoutRef = useRef(null)
 
-  const loadModels = useCallback(async () => {
-    const response = await adminFetch('/admin/models')
-    const data = await response.json()
-    const items = Array.isArray(data.items) ? data.items : []
-    setModels(items)
-    if (!selectedModelId && items[0]?.id) setSelectedModelId(items[0].id)
-  }, [adminFetch, selectedModelId])
-
-  const loadState = useCallback(
-    async (modelId = selectedModelId, { silent = false } = {}) => {
-      if (!modelId) return
+  const loadBatch = useCallback(
+    async ({ silent = false } = {}) => {
       if (!silent) setBusy(true)
       try {
-        const response = await adminFetch(`/admin/models/${encodeURIComponent(modelId)}/voice-call-test`)
+        const response = await adminFetch('/admin/voice-call-test/batch')
         const data = await response.json()
-        setState(data)
-        if (!silent) setStatus('Состояние загружено')
-        const photosActive = isActiveSection(data.photos)
-        const videoActive = isActiveSection(data.video)
+        const nextItems = Array.isArray(data.items) ? data.items : []
+        setItems(nextItems)
+        setActiveJobs(Number(data.active_jobs) || 0)
+        if (!silent) setStatus(`Моделей в очереди: ${nextItems.length}`)
         if (pollTimeoutRef.current) {
           clearTimeout(pollTimeoutRef.current)
           pollTimeoutRef.current = null
         }
-        if (photosActive || videoActive) {
+        const hasActive = (Number(data.active_jobs) || 0) > 0 || nextItems.some((item) => isActiveSection(item.photos) || isActiveSection(item.video))
+        if (hasActive) {
           pollTimeoutRef.current = setTimeout(() => {
-            loadState(modelId, { silent: true })
+            loadBatch({ silent: true })
           }, 3500)
         }
+        if (nextItems.length > 0) {
+          setBatchStarted(true)
+        }
+        return data
       } catch (error) {
         if (!silent) setStatus(`Ошибка: ${error.message}`)
+        return null
       } finally {
         if (!silent) setBusy(false)
       }
     },
-    [adminFetch, selectedModelId]
+    [adminFetch]
   )
 
   useEffect(() => {
-    if (!isActive) return
-    loadModels().catch((error) => setStatus(`Ошибка списка моделей: ${error.message}`))
-  }, [isActive, loadModels])
-
-  useEffect(() => {
-    if (!isActive || !selectedModelId) return
-    setSelectedPhotoUrl('')
-    loadState(selectedModelId)
-  }, [isActive, selectedModelId, loadState])
+    if (!isActive) return undefined
+    loadBatch({ silent: true })
+    return undefined
+  }, [isActive, loadBatch])
 
   useEffect(() => {
     if (isActive) return undefined
@@ -80,220 +175,128 @@ export default function VoiceCallTestTab({ adminFetch, isActive }) {
     []
   )
 
-  const runAction = async (label, request) => {
-    if (!selectedModelId) return
+  const startAll = async () => {
     setBusy(true)
-    setStatus(label)
+    setStatus('Запускаю генерацию фото для всех моделей…')
     try {
-      const response = await request()
+      const response = await adminFetch('/admin/voice-call-test/start-all', { method: 'POST' })
       const data = await response.json()
-      setState(data)
-      setStatus(label.replace('…', ' — готово'))
-      const photosActive = isActiveSection(data.photos)
-      const videoActive = isActiveSection(data.video)
-      if (photosActive || videoActive) {
-        loadState(selectedModelId, { silent: true })
-      }
+      setItems(Array.isArray(data.items) ? data.items : [])
+      setActiveJobs(Number(data.active_jobs) || 0)
+      setBatchStarted(true)
+      setStatus(
+        `Запущено: ${data.started_count || 0}. Без avatar: ${data.skipped_no_avatar_count || 0}. Уже применены: ${data.skipped_applied_count || 0}.`
+      )
+      loadBatch({ silent: true })
     } catch (error) {
-      setStatus(`${label.replace('…', '')}: ${error.message}`)
+      setStatus(`Старт: ${error.message}`)
     } finally {
       setBusy(false)
     }
   }
 
-  const startTest = () =>
-    runAction('Запускаю генерацию фото…', () =>
-      adminFetch(`/admin/models/${encodeURIComponent(selectedModelId)}/voice-call-test/start`, {
-        method: 'POST',
-      })
-    )
+  const runModelAction = async (modelId, label, request) => {
+    setBusyModelId(modelId)
+    setStatus(label)
+    try {
+      await request()
+      setStatus(label.replace('…', ' — готово'))
+      await loadBatch({ silent: true })
+    } catch (error) {
+      setStatus(`${label.replace('…', '')}: ${error.message}`)
+    } finally {
+      setBusyModelId('')
+    }
+  }
 
-  const regeneratePhotos = () =>
-    runAction('Перегенерирую 3 фото…', () =>
-      adminFetch(`/admin/models/${encodeURIComponent(selectedModelId)}/voice-call-test/regenerate-photos`, {
-        method: 'POST',
-      })
-    )
-
-  const startVideo = async (imageUrl) => {
-    if (!selectedModelId || !imageUrl) return
-    setStartingVideoUrl(imageUrl)
-    await runAction('Запускаю видео…', () =>
-      adminFetch(`/admin/models/${encodeURIComponent(selectedModelId)}/voice-call-test/video/start`, {
+  const startVideo = async (modelId, imageUrl) => {
+    const videoKey = `${modelId}:${imageUrl}`
+    setStartingVideoKey(videoKey)
+    await runModelAction(modelId, 'Запускаю видео…', () =>
+      adminFetch(`/admin/models/${encodeURIComponent(modelId)}/voice-call-test/video/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_url: imageUrl }),
       })
     )
-    setStartingVideoUrl('')
+    setStartingVideoKey('')
   }
 
-  const regenerateVideo = () =>
-    runAction('Перегенерирую видео…', () =>
-      adminFetch(`/admin/models/${encodeURIComponent(selectedModelId)}/voice-call-test/video/regenerate`, {
+  const regeneratePhotos = (modelId) =>
+    runModelAction(modelId, 'Перегенерирую 3 фото…', () =>
+      adminFetch(`/admin/models/${encodeURIComponent(modelId)}/voice-call-test/regenerate-photos`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_url: selectedPhotoUrl || state?.video?.source_image_url || '' }),
       })
     )
 
-  const applyAssets = () => {
-    const imageUrl = selectedPhotoUrl
-    const videoUrl = state?.video?.video_url
-    if (!imageUrl) {
-      setStatus('Выберите фото для применения')
-      return
-    }
-    if (!videoUrl) {
-      setStatus('Сначала сгенерируйте видео')
-      return
-    }
-    return runAction('Применяю к модели…', () =>
-      adminFetch(`/admin/models/${encodeURIComponent(selectedModelId)}/voice-call-test/apply`, {
+  const regenerateVideo = (modelId, imageUrl) =>
+    runModelAction(modelId, 'Перегенерирую видео…', () =>
+      adminFetch(`/admin/models/${encodeURIComponent(modelId)}/voice-call-test/video/regenerate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_url: imageUrl }),
+      })
+    )
+
+  const applyAssets = (modelId, imageUrl, videoUrl) =>
+    runModelAction(modelId, 'Применяю к модели…', async () => {
+      await adminFetch(`/admin/models/${encodeURIComponent(modelId)}/voice-call-test/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_url: imageUrl, video_url: videoUrl }),
       })
-    )
-  }
-
-  const photoUrls = Array.isArray(state?.photos?.urls) ? state.photos.urls : []
-  const videoUrl = state?.video?.video_url || ''
-  const photosBusy = isActiveSection(state?.photos)
-  const videoBusy = isActiveSection(state?.video)
-  const appliedImage = state?.applied?.voice_call_image_url || ''
-  const appliedVideo = state?.applied?.voice_call_video_url || ''
+      setItems((prev) => prev.filter((item) => item.model_id !== modelId))
+    })
 
   return (
-    <section className="contentModerationPage">
+    <section className="contentModerationPage voiceCallPage">
       <section className="card">
-        <h2>Тест: аватар звонка (voice call)</h2>
+        <h2>Аватар звонка — пакетная генерация</h2>
         <p className="fieldHint">
-          Референс — только avatar модели. Kling omni-image → 3 квадратных фото, затем omni-video для одного выбранного
-          фото. После «Применить» URL сохраняются в поля <code>voice_call_image_url</code> и{' '}
-          <code>voice_call_video_url</code>.
+          Нажмите «Начать» — для всех моделей без готовых voice call ассетов запустится очередь фото (Kling omni-image, 3
+          квадрата). По каждой модели выберите фото → видео (до 20 параллельно). После «Применить» блок модели скрывается.
         </p>
         <div className="miniRow">
-          <select value={selectedModelId} onChange={(event) => setSelectedModelId(event.target.value)}>
-            <option value="">— Выберите модель —</option>
-            {models.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.name || model.id} · {model.id}
-              </option>
-            ))}
-          </select>
-          <button type="button" className="primaryAction" disabled={busy || !selectedModelId} onClick={startTest}>
-            Запустить
+          <button type="button" className="primaryAction" disabled={busy} onClick={startAll}>
+            Начать
           </button>
-          <button type="button" disabled={busy || !selectedModelId} onClick={() => loadState()}>
+          <button type="button" disabled={busy} onClick={() => loadBatch()}>
             Обновить
           </button>
+          {batchStarted ? (
+            <span className="fieldHint">
+              Моделей: {items.length}
+              {activeJobs > 0 ? ` · активных задач: ${activeJobs}` : ''}
+            </span>
+          ) : null}
         </div>
         {status ? <p className="status">{status}</p> : null}
       </section>
 
-      {state?.source_avatar_url ? (
+      {!batchStarted && !items.length ? (
         <section className="card">
-          <h3>Референс (avatar)</h3>
-          <div className="moderationGrid">
-            <article className="moderationCard">
-              <img src={state.source_avatar_url} alt="Avatar reference" />
-            </article>
-          </div>
+          <p className="fieldHint">Нажмите «Начать», чтобы поставить все модели в очередь на генерацию фото.</p>
         </section>
       ) : null}
 
-      <section className="card">
-        <div className="miniRow">
-          <h3>Фото с телефоном (3 шт.)</h3>
-          <button
-            type="button"
-            disabled={busy || !selectedModelId || photosBusy}
-            onClick={regeneratePhotos}
-          >
-            Перегенерировать все 3
-          </button>
-        </div>
-        <p className="fieldHint">
-          Статус: {state?.photos?.status_ru || '—'}
-          {state?.photos?.error ? ` · ${state.photos.error}` : ''}
-        </p>
-        {photoUrls.length ? (
-          <div className="moderationGrid">
-            {photoUrls.map((url) => {
-              const selected = selectedPhotoUrl === url
-              const isVideoSource = state?.video?.source_image_url === url
-              return (
-                <article className="moderationCard" key={url}>
-                  <label className="pushUserRow">
-                    <input
-                      type="radio"
-                      name="voice-call-photo"
-                      checked={selected}
-                      onChange={() => setSelectedPhotoUrl(url)}
-                    />
-                    <span>Выбрать для apply</span>
-                  </label>
-                  <img src={url} alt="Voice call candidate" />
-                  <button
-                    type="button"
-                    disabled={busy || videoBusy || startingVideoUrl === url}
-                    onClick={() => startVideo(url)}
-                  >
-                    {startingVideoUrl === url ? 'Запуск…' : isVideoSource && videoUrl ? 'Пересоздать видео' : 'Сделать видео'}
-                  </button>
-                </article>
-              )
-            })}
-          </div>
-        ) : (
-          <p className="fieldHint">Нажмите «Запустить», чтобы сгенерировать 3 фото.</p>
-        )}
-      </section>
+      {items.map((item) => (
+        <ModelVoiceCallBlock
+          key={item.model_id}
+          item={item}
+          busyModelId={busyModelId}
+          startingVideoKey={startingVideoKey}
+          onStartVideo={startVideo}
+          onRegeneratePhotos={regeneratePhotos}
+          onRegenerateVideo={regenerateVideo}
+          onApply={applyAssets}
+        />
+      ))}
 
-      {(videoUrl || state?.video?.source_image_url || videoBusy) && (
+      {batchStarted && !items.length ? (
         <section className="card">
-          <div className="miniRow">
-            <h3>Видео звонка (одно на модель)</h3>
-            <button type="button" disabled={busy || videoBusy || !state?.video?.source_image_url} onClick={regenerateVideo}>
-              Перегенерировать видео
-            </button>
-          </div>
-          <p className="fieldHint">
-            Статус: {state?.video?.status_ru || '—'}
-            {state?.video?.error ? ` · ${state.video.error}` : ''}
-          </p>
-          {videoUrl ? (
-            <div className="moderationGrid">
-              <article className="moderationCard">
-                <video src={videoUrl} controls muted playsInline />
-              </article>
-            </div>
-          ) : null}
+          <p className="fieldHint">Все модели обработаны или уже имеют voice call ассеты.</p>
         </section>
-      )}
-
-      <section className="card">
-        <h3>Применить к модели</h3>
-        <p className="fieldHint">
-          Отметьте одно фото и убедитесь, что видео готово. Файлы будут загружены в R2 и записаны в модель.
-        </p>
-        {(appliedImage || appliedVideo) && (
-          <div className="fieldHint">
-            <div>Текущие на модели:</div>
-            {appliedImage ? <div>image: {appliedImage}</div> : null}
-            {appliedVideo ? <div>video: {appliedVideo}</div> : null}
-          </div>
-        )}
-        <button
-          type="button"
-          className="primaryAction"
-          disabled={busy || !selectedPhotoUrl || !videoUrl}
-          onClick={applyAssets}
-        >
-          Применить
-        </button>
-      </section>
+      ) : null}
     </section>
   )
 }

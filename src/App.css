@@ -682,6 +682,82 @@ pre {
   line-height: 1.35;
 }
 
+.voiceCallPage {
+  gap: 16px;
+}
+
+.voiceCallModelBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.voiceCallModelHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+}
+
+.voiceCallModelHeader h3 {
+  margin: 0;
+}
+
+.voiceCallStatusLine {
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.voiceCallPhotoGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.voiceCallCard {
+  max-width: 220px;
+}
+
+.voiceCallSquareMedia {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #0f172a;
+  display: block;
+}
+
+.voiceCallVideoSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.voiceCallVideoCard {
+  max-width: 220px;
+}
+
+.voiceCallApplyRow {
+  padding-top: 4px;
+}
+
+@media (max-width: 900px) {
+  .voiceCallPhotoGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .voiceCallPhotoGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .voiceCallCard,
+  .voiceCallVideoCard {
+    max-width: none;
+  }
+}
+
 .flagToggle {
   display: inline-flex;
   align-items: center;
