@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import FeedPostsTab from './FeedPostsTab'
+import VoiceCallTestTab from './VoiceCallTestTab'
 
 const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL || 'https://web-production-c51d.up.railway.app'
@@ -1994,6 +1995,13 @@ function App() {
             </button>
             <button
               type="button"
+              className={mainTab === 'voiceCallTest' ? 'topTab active' : 'topTab'}
+              onClick={() => setMainTab('voiceCallTest')}
+            >
+              Звонок (тест)
+            </button>
+            <button
+              type="button"
               className={mainTab === 'settings' ? 'topTab active' : 'topTab'}
               onClick={() => setMainTab('settings')}
             >
@@ -2138,6 +2146,9 @@ function App() {
         <ModelContentBankTab adminFetch={adminFetch} isActive={mainTab === 'modelContentBank'} />
       )}
       {mainTab === 'banners' && <BannersTab adminFetch={adminFetch} isActive={mainTab === 'banners'} />}
+      {mainTab === 'voiceCallTest' && (
+        <VoiceCallTestTab adminFetch={adminFetch} isActive={mainTab === 'voiceCallTest'} />
+      )}
       {mainTab === 'settings' && <ContentSettingsTab adminFetch={adminFetch} isActive={mainTab === 'settings'} />}
 
       {mainTab === 'editor' && step === 'form' && (
