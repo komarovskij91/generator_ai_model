@@ -790,6 +790,35 @@ pre {
   height: 16px;
 }
 
+.paidMediaControls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tokenCostRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tokenCostBtn {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tokenCostBtn.active {
+  background: #0f172a;
+  color: #fff;
+  border-color: #0f172a;
+}
+
 .dangerButton {
   background: #dc2626;
   color: #fff;

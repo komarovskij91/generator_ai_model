@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import FeedPostsTab from './FeedPostsTab'
 import VoiceCallDraftSection from './VoiceCallDraftSection'
+import { PaidMediaControls } from './PaidMediaControls'
+import { GeneratedPaidControls, setGeneratedPaidFlags } from './GeneratedPaidControls'
 
 const createVoiceCallSessionId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -722,10 +724,9 @@ function ContentModerationTab({ adminFetch, isActive }) {
     })
   }
 
-  const updateMediaFlag = async (url, key, checked) => {
+  const saveMediaFlags = async (url, nextFlags) => {
     if (!content?.model_id) return
     const current = mediaFlagsFor(url)
-    const nextFlags = { ...current, [key]: checked }
     setLocalMediaFlag(url, nextFlags)
     setStatus('Сохраняю флаг медиа…')
     try {
@@ -739,6 +740,11 @@ function ContentModerationTab({ adminFetch, isActive }) {
       setLocalMediaFlag(url, current)
       setStatus(`Флаг медиа: ${error.message}`)
     }
+  }
+
+  const updateMediaFlag = async (url, key, checked) => {
+    const current = mediaFlagsFor(url)
+    await saveMediaFlags(url, { ...current, [key]: checked })
   }
 
   const deleteStoryMedia = async (item) => {
@@ -818,21 +824,38 @@ function ContentModerationTab({ adminFetch, isActive }) {
     }
   }
 
-  const updatePostFlag = async (post, key, checked) => {
-    const previous = Boolean(post[key])
-    setLocalPostFlag(post.id, key, checked)
-    setStatus('Сохраняю флаг поста…')
+  const updatePostFlags = async (post, partial) => {
+    setContent((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        posts: (prev.posts || []).map((item) => (item.id === post.id ? { ...item, ...partial } : item)),
+      }
+    })
+    setStatus('Сохраняю флаги поста…')
     try {
-      await adminFetch(`/admin/feed/posts/${encodeURIComponent(post.id)}/flags`, {
+      const response = await adminFetch(`/admin/feed/posts/${encodeURIComponent(post.id)}/flags`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [key]: checked }),
+        body: JSON.stringify(partial),
       })
-      setStatus('Флаг поста сохранён')
+      const updated = await response.json()
+      setContent((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          posts: (prev.posts || []).map((item) => (item.id === post.id ? { ...item, ...updated } : item)),
+        }
+      })
+      setStatus('Флаги поста сохранены')
     } catch (error) {
-      setLocalPostFlag(post.id, key, previous)
-      setStatus(`Флаг поста: ${error.message}`)
+      setStatus(`Флаги поста: ${error.message}`)
+      loadContent(content?.model_id, { silent: true })
     }
+  }
+
+  const updatePostFlag = async (post, key, checked) => {
+    await updatePostFlags(post, { [key]: checked })
   }
 
   return (
@@ -942,14 +965,10 @@ function ContentModerationTab({ adminFetch, isActive }) {
                       />
                       <span>Эротика</span>
                     </label>
-                    <label className="flagToggle">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(flags.is_paid)}
-                        onChange={(event) => updateMediaFlag(item.url, 'is_paid', event.target.checked)}
-                      />
-                      <span>Платный</span>
-                    </label>
+                    <PaidMediaControls
+                      flags={flags}
+                      onChange={(nextFlags) => saveMediaFlags(item.url, nextFlags)}
+                    />
                   </article>
                 )
               })}
@@ -978,14 +997,20 @@ function ContentModerationTab({ adminFetch, isActive }) {
                     />
                     <span>Эротика</span>
                   </label>
-                  <label className="flagToggle">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(post.is_paid)}
-                      onChange={(event) => updatePostFlag(post, 'is_paid', event.target.checked)}
-                    />
-                    <span>Платный</span>
-                  </label>
+                  <PaidMediaControls
+                    flags={{
+                      is_paid: Boolean(post.is_paid),
+                      unlock_cost: post.unlock_cost ?? null,
+                      preview_status: post.preview_status,
+                      preview_url: post.preview_url,
+                    }}
+                    onChange={(nextFlags) =>
+                      updatePostFlags(post, {
+                        is_paid: Boolean(nextFlags.is_paid),
+                        unlock_cost: nextFlags.unlock_cost ?? null,
+                      })
+                    }
+                  />
                   <label className="flagToggle">
                     <input
                       type="checkbox"
@@ -1633,6 +1658,7 @@ function App() {
         profile: kind === 'video' ? false : false,
         is_adult: Boolean(group?.is_adult),
         is_paid: false,
+        unlock_cost: null,
       }
       const nextItem = { ...current, kind, [target]: !current[target] }
       return { ...prev, [key]: nextItem }
@@ -1650,8 +1676,25 @@ function App() {
         profile: kind === 'video' ? false : false,
         is_adult: Boolean(group?.is_adult),
         is_paid: false,
+        unlock_cost: null,
       }
       return { ...prev, [key]: { ...current, kind, [flag]: !current[flag] } }
+    })
+  }
+
+  const updateGeneratedPaidFlags = (promptId, url, nextFlags, kind = 'image') => {
+    const key = `${promptId}|||${url}`
+    setContentSelection((prev) => {
+      const group = contentPromptGroups.find((item) => item.id === promptId)
+      return setGeneratedPaidFlags(prev, key, nextFlags, {
+        kind,
+        story: false,
+        chat: false,
+        profile: kind === 'video' ? false : false,
+        is_adult: Boolean(group?.is_adult),
+        is_paid: false,
+        unlock_cost: null,
+      })
     })
   }
 
@@ -1674,6 +1717,7 @@ function App() {
           targets,
           is_adult: Boolean(flags.is_adult),
           is_paid: Boolean(flags.is_paid),
+          unlock_cost: flags.unlock_cost ?? null,
         }
       })
       .filter((item) => item.targets.length > 0)
@@ -1908,6 +1952,7 @@ function App() {
                     profile: false,
                     is_adult: Boolean(group.is_adult),
                     is_paid: false,
+                    unlock_cost: null,
                   }
                   const videoJobs = (group.video_jobs || []).filter((job) => job.image_url === url)
                   return (
@@ -1917,7 +1962,11 @@ function App() {
                       <label><input type="checkbox" checked={checked.chat} onChange={() => toggleGeneratedSelection(group.id, url, 'chat')} /> фото для чата</label>
                       <label><input type="checkbox" checked={checked.profile} onChange={() => toggleGeneratedSelection(group.id, url, 'profile')} /> фото для профиля</label>
                       <label><input type="checkbox" checked={checked.is_adult} onChange={() => toggleGeneratedFlag(group.id, url, 'is_adult')} /> эротика</label>
-                      <label><input type="checkbox" checked={checked.is_paid} onChange={() => toggleGeneratedFlag(group.id, url, 'is_paid')} /> платный</label>
+                      <GeneratedPaidControls
+                        checked={checked}
+                        disabled={isLoading}
+                        onChange={(next) => updateGeneratedPaidFlags(group.id, url, next)}
+                      />
                       <button
                         type="button"
                         disabled={isLoading || videoJobs.some((job) => ['queued', 'prompting', 'running'].includes(job.status))}
@@ -1935,6 +1984,7 @@ function App() {
                           profile: false,
                           is_adult: Boolean(group.is_adult),
                           is_paid: false,
+                          unlock_cost: null,
                         }
                         return (
                           <div key={job.id} className="generatedVideoItem">
@@ -1945,7 +1995,11 @@ function App() {
                                 <label><input type="checkbox" checked={videoChecked.story} onChange={() => toggleGeneratedSelection(group.id, videoUrl, 'story', 'video')} /> видео в сторис</label>
                                 <label><input type="checkbox" checked={videoChecked.chat} onChange={() => toggleGeneratedSelection(group.id, videoUrl, 'chat', 'video')} /> видео для чата</label>
                                 <label><input type="checkbox" checked={videoChecked.is_adult} onChange={() => toggleGeneratedFlag(group.id, videoUrl, 'is_adult', 'video')} /> эротика</label>
-                                <label><input type="checkbox" checked={videoChecked.is_paid} onChange={() => toggleGeneratedFlag(group.id, videoUrl, 'is_paid', 'video')} /> платный</label>
+                                <GeneratedPaidControls
+                                  checked={videoChecked}
+                                  disabled={isLoading}
+                                  onChange={(next) => updateGeneratedPaidFlags(group.id, videoUrl, next, 'video')}
+                                />
                               </>
                             ) : null}
                             {job.error && <small className="fieldHint">Ошибка видео: {String(job.error)}</small>}
@@ -2391,6 +2445,7 @@ function App() {
                             profile: false,
                             is_adult: Boolean(group.is_adult),
                             is_paid: false,
+                            unlock_cost: null,
                           }
                           const videoJobs = (group.video_jobs || []).filter((job) => job.image_url === url)
                           return (
@@ -2400,7 +2455,11 @@ function App() {
                               <label><input type="checkbox" checked={checked.chat} onChange={() => toggleGeneratedSelection(group.id, url, 'chat')} /> фото для чата</label>
                               <label><input type="checkbox" checked={checked.profile} onChange={() => toggleGeneratedSelection(group.id, url, 'profile')} /> фото для профиля</label>
                               <label><input type="checkbox" checked={checked.is_adult} onChange={() => toggleGeneratedFlag(group.id, url, 'is_adult')} /> эротика</label>
-                              <label><input type="checkbox" checked={checked.is_paid} onChange={() => toggleGeneratedFlag(group.id, url, 'is_paid')} /> платный</label>
+                              <GeneratedPaidControls
+                                checked={checked}
+                                disabled={isLoading}
+                                onChange={(next) => updateGeneratedPaidFlags(group.id, url, next)}
+                              />
                               <button
                                 type="button"
                                 disabled={isLoading || videoJobs.some((job) => ['queued', 'prompting', 'running'].includes(job.status))}
@@ -2418,6 +2477,7 @@ function App() {
                                   profile: false,
                                   is_adult: Boolean(group.is_adult),
                                   is_paid: false,
+                                  unlock_cost: null,
                                 }
                                 return (
                                   <div key={job.id} className="generatedVideoItem">
@@ -2428,7 +2488,11 @@ function App() {
                                         <label><input type="checkbox" checked={videoChecked.story} onChange={() => toggleGeneratedSelection(group.id, videoUrl, 'story', 'video')} /> видео в сторис</label>
                                         <label><input type="checkbox" checked={videoChecked.chat} onChange={() => toggleGeneratedSelection(group.id, videoUrl, 'chat', 'video')} /> видео для чата</label>
                                         <label><input type="checkbox" checked={videoChecked.is_adult} onChange={() => toggleGeneratedFlag(group.id, videoUrl, 'is_adult', 'video')} /> эротика</label>
-                                        <label><input type="checkbox" checked={videoChecked.is_paid} onChange={() => toggleGeneratedFlag(group.id, videoUrl, 'is_paid', 'video')} /> платный</label>
+                                        <GeneratedPaidControls
+                                          checked={videoChecked}
+                                          disabled={isLoading}
+                                          onChange={(next) => updateGeneratedPaidFlags(group.id, videoUrl, next, 'video')}
+                                        />
                                       </>
                                     ) : null}
                                     {job.error && <small className="fieldHint">Ошибка видео: {String(job.error)}</small>}

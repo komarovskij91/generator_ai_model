@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { PaidMediaControls } from './PaidMediaControls'
 
 const DRAFT_PAGE_SIZE = 20
 const POST_PAGE_SIZE = 30
@@ -85,6 +86,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     dislikes_count: edit.dislikes_count ?? draft.dislikes_count ?? 0,
     is_adult: Boolean(edit.is_adult ?? draft.is_adult),
     is_paid: Boolean(edit.is_paid ?? draft.is_paid),
+    unlock_cost: edit.unlock_cost ?? draft.unlock_cost ?? null,
     is_prime_only: Boolean(edit.is_prime_only ?? draft.is_prime_only),
   })
 
@@ -320,10 +322,10 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     }
   }
 
-  const setLocalPostFlag = (postId, key, checked) => {
+  const setLocalPostFlag = (postId, key, value) => {
     const updateItems = (prev) =>
       (prev || []).map((post) =>
-        post.id === postId ? { ...post, [key]: checked } : post
+        post.id === postId ? { ...post, [key]: value } : post
       )
     setReadyPosts(updateItems)
     setPublishedPosts(updateItems)
@@ -346,6 +348,33 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     }
   }
 
+  const updatePostPaidFlags = async (post, nextFlags) => {
+    const previous = {
+      is_paid: Boolean(post.is_paid),
+      unlock_cost: post.unlock_cost ?? null,
+      preview_status: post.preview_status,
+      preview_url: post.preview_url,
+    }
+    setLocalPostFlag(post.id, 'is_paid', Boolean(nextFlags.is_paid))
+    setLocalPostFlag(post.id, 'unlock_cost', nextFlags.unlock_cost ?? null)
+    setStatus('Сохраняю платный пост…')
+    try {
+      await adminFetch(`/admin/feed/posts/${encodeURIComponent(post.id)}/flags`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          is_paid: Boolean(nextFlags.is_paid),
+          unlock_cost: nextFlags.unlock_cost ?? null,
+        }),
+      })
+      setStatus('Платный пост сохранён')
+    } catch (error) {
+      setLocalPostFlag(post.id, 'is_paid', previous.is_paid)
+      setLocalPostFlag(post.id, 'unlock_cost', previous.unlock_cost)
+      setStatus(`Платный пост: ${error.message}`)
+    }
+  }
+
   const postFlagControls = (post) => (
     <div className="postFlagControls">
       <label className="flagToggle">
@@ -356,14 +385,20 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
         />
         <span>Эротика</span>
       </label>
-      <label className="flagToggle">
-        <input
-          type="checkbox"
-          checked={Boolean(post.is_paid)}
-          onChange={(event) => updatePostFlag(post, 'is_paid', event.target.checked)}
-        />
-        <span>Платный</span>
-      </label>
+      <PaidMediaControls
+        flags={{
+          is_paid: Boolean(post.is_paid),
+          unlock_cost: post.unlock_cost ?? null,
+          preview_status: post.preview_status,
+          preview_url: post.preview_url,
+        }}
+        onChange={(nextFlags) =>
+          updatePostPaidFlags(post, {
+            is_paid: Boolean(nextFlags.is_paid),
+            unlock_cost: nextFlags.unlock_cost ?? null,
+          })
+        }
+      />
       <label className="flagToggle">
         <input
           type="checkbox"
@@ -537,19 +572,22 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                         />
                         <span>Эротика</span>
                       </label>
-                      <label className="flagToggle">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(draftValue(draft, 'is_paid'))}
-                          onChange={(e) =>
-                            setDraftEdits((prev) => ({
-                              ...prev,
-                              [draft.id]: { ...(prev[draft.id] || {}), is_paid: e.target.checked },
-                            }))
-                          }
-                        />
-                        <span>Платный</span>
-                      </label>
+                      <PaidMediaControls
+                        flags={{
+                          is_paid: Boolean(draftValue(draft, 'is_paid')),
+                          unlock_cost: draftValue(draft, 'unlock_cost') ?? null,
+                        }}
+                        onChange={(nextFlags) =>
+                          setDraftEdits((prev) => ({
+                            ...prev,
+                            [draft.id]: {
+                              ...(prev[draft.id] || {}),
+                              is_paid: Boolean(nextFlags.is_paid),
+                              unlock_cost: nextFlags.unlock_cost ?? null,
+                            },
+                          }))
+                        }
+                      />
                       <label className="flagToggle">
                         <input
                           type="checkbox"
