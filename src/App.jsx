@@ -863,7 +863,7 @@ function ContentModerationTab({ adminFetch, isActive }) {
       <section className="card">
         <h2>Разметка контента модели</h2>
         <p className="fieldHint">
-          Старый контент без галочек считается разрешённым. Эротика фильтруется backend-настройкой, платный контент пока только помечается.
+          Старый контент без галочек считается разрешённым. Эротика фильтруется backend-настройкой, платный контент генерирует blur-preview через noloo_media_blur.
         </p>
         <div className="miniRow">
           <select value={selectedModelId} onChange={(event) => setSelectedModelId(event.target.value)}>
