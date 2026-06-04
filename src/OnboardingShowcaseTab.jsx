@@ -143,7 +143,7 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
             <p className="fieldHint">
               Настройка нового iOS onboarding: модели, посты, звонки. Есть два режима: <code>all</code> и <code>girl</code>.
               <br />
-              <strong>Источник истины для приложения — этот конфиг + поле start ниже.</strong> Старый onboarding_config.json больше не используется для выбора контента после логина.
+              <strong>Источник истины для приложения — этот конфиг + поле start ниже.</strong> Старый onboarding_config.json больше не используется для выбора контента после логина. (updated 2026-06-04)
             </p>
           </div>
           <div className="miniRow">
