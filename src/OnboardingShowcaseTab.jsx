@@ -266,6 +266,9 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
           </div>
         </div>
         {status ? <p className="status">{status}</p> : null}
+        {(busy || (models.length === 0 && !String(status || '').includes('Ошибка'))) && (
+          <p className="fieldHint" style={{ margin: '8px 0' }}>Загрузка списка моделей, постов и конфига онбординга...</p>
+        )}
         <div className="tabs">
           {Object.entries(variantLabels).map(([key, label]) => (
             <button key={key} type="button" className={variant === key ? 'topTab active' : 'topTab'} onClick={() => setVariant(key)}>
