@@ -67,13 +67,16 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
   // Per-model posts cache for accurate / full list when picking in Posts section
   // (the global published list is limited to ~100, so per-model fetch gives more for the chosen model)
   const [modelPostsCache, setModelPostsCache] = useState({})
+  const modelPostsCacheRef = useRef({})
   const loadPostsForModel = useCallback(async (mid) => {
     if (!mid) return []
-    if (modelPostsCache[mid]) return modelPostsCache[mid]
+    // Use ref for fresh check to avoid stale closure
+    if (modelPostsCacheRef.current[mid]) return modelPostsCacheRef.current[mid]
     try {
       const res = await adminFetch(`/feed/posts?model_id=${encodeURIComponent(mid)}&limit=200`)
       const data = await res.json()
       const list = Array.isArray(data?.items) ? data.items : []
+      modelPostsCacheRef.current[mid] = list
       setModelPostsCache((prev) => ({ ...prev, [mid]: list }))
       // Merge into the main posts list so postById (and other lookups) always have the image_url etc.
       // This ensures previews work even for posts that weren't in the initial global recent-100 fetch.
@@ -86,7 +89,7 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
     } catch (e) {
       return []
     }
-  }, [adminFetch, modelPostsCache])
+  }, [adminFetch])
 
   const refresh = useCallback(async () => {
     if (!isActive) return
@@ -133,11 +136,11 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
     if (!isActive || !config) return
     const postsInVariant = (config.variants?.[variant]?.posts) || []
     postsInVariant.forEach((p) => {
-      if (p.model_id && !modelPostsCache[p.model_id]) {
+      if (p.model_id && !modelPostsCacheRef.current[p.model_id]) {
         loadPostsForModel(p.model_id)
       }
     })
-  }, [config, variant, isActive, loadPostsForModel, modelPostsCache])
+  }, [config, variant, isActive, loadPostsForModel])
 
   const updateVariant = (patch) => {
     setConfig((prev) => ({
