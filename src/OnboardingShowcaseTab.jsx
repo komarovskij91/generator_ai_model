@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 const emptyVariant = () => ({ models: [], posts: [], calls: [] })
 const emptyConfig = () => ({
@@ -36,6 +36,12 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
 
+  // Declare cache states early (right after basic useState) so useMemos (postById etc.)
+  // and effects can safely reference without TDZ, and for stable hook ordering.
+  // This also prevents crashes that could make the whole tab render as blank/empty screen.
+  const [modelPostsCache, setModelPostsCache] = useState({})
+  const modelPostsCacheRef = useRef({})
+
   const current = (config.variants && config.variants[variant]) || emptyVariant()
   const modelById = useMemo(() => Object.fromEntries(models.map((m) => [m.id, m])), [models])
   const postById = useMemo(() => {
@@ -64,10 +70,6 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
     return map
   }, [posts])
 
-  // Per-model posts cache for accurate / full list when picking in Posts section
-  // (the global published list is limited to ~100, so per-model fetch gives more for the chosen model)
-  const [modelPostsCache, setModelPostsCache] = useState({})
-  const modelPostsCacheRef = useRef({})
   const loadPostsForModel = useCallback(async (mid) => {
     if (!mid) return []
     // Use ref for fresh check to avoid stale closure
