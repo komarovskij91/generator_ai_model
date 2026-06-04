@@ -40,7 +40,7 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
   const modelById = useMemo(() => Object.fromEntries(models.map((m) => [m.id, m])), [models])
   const postById = useMemo(() => Object.fromEntries(posts.map((p) => [p.id, p])), [posts])
 
-  // Group posts by model_id for filtered selection in the Posts section
+  // Group posts by model_id for filtered selection in the Posts section (fallback)
   const postsByModel = useMemo(() => {
     const map = {}
     ;(posts || []).forEach((p) => {
@@ -50,6 +50,23 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
     })
     return map
   }, [posts])
+
+  // Per-model posts cache for accurate / full list when picking in Posts section
+  // (the global published list is limited to ~100, so per-model fetch gives more for the chosen model)
+  const [modelPostsCache, setModelPostsCache] = useState({})
+  const loadPostsForModel = useCallback(async (mid) => {
+    if (!mid) return []
+    if (modelPostsCache[mid]) return modelPostsCache[mid]
+    try {
+      const res = await adminFetch(`/feed/posts?model_id=${encodeURIComponent(mid)}&limit=200`)
+      const data = await res.json()
+      const list = Array.isArray(data?.items) ? data.items : []
+      setModelPostsCache((prev) => ({ ...prev, [mid]: list }))
+      return list
+    } catch (e) {
+      return []
+    }
+  }, [adminFetch, modelPostsCache])
 
   const refresh = useCallback(async () => {
     if (!isActive) return
@@ -90,6 +107,17 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
   useEffect(() => {
     if (isActive) refresh()
   }, [isActive, refresh])
+
+  // Preload per-model posts for any already configured post items (so dropdowns have full lists)
+  useEffect(() => {
+    if (!isActive || !config) return
+    const postsInVariant = (config.variants?.[variant]?.posts) || []
+    postsInVariant.forEach((p) => {
+      if (p.model_id && !modelPostsCache[p.model_id]) {
+        loadPostsForModel(p.model_id)
+      }
+    })
+  }, [config, variant, isActive, loadPostsForModel, modelPostsCache])
 
   const updateVariant = (patch) => {
     setConfig((prev) => ({
@@ -286,16 +314,18 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
         onAdd={() => addPost()}
         renderItem={(item, index) => {
           const chosenModelForPost = item.model_id || ''
-          const filteredPosts = postsByModel[chosenModelForPost] || []
+          const cached = modelPostsCache[chosenModelForPost] || []
+          const fallback = postsByModel[chosenModelForPost] || []
+          const filteredPosts = cached.length > 0 ? cached : fallback
           return (
             <div className="showcaseRow compact" key={`post-${index}`}>
-              {/* Model first, then only its posts */}
+              {/* Model first, then only its posts (loaded on demand for full list per model) */}
               <select
                 value={chosenModelForPost}
                 onChange={(e) => {
                   const newMid = e.target.value
-                  // reset post when model changes
                   updateListItem('posts', index, { model_id: newMid, post_id: '' })
+                  if (newMid) loadPostsForModel(newMid)
                 }}
               >
                 <option value="">— модель —</option>
@@ -329,39 +359,68 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
         onAdd={() => addModel('calls')}
         renderItem={(item, index) => (
           <div className="showcaseRow compact" key={`call-${index}`}>
-            {/* Visual picker with voice call avatars */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxWidth: 420 }}>
-              {models.map((m) => {
-                const vcVideo = m.voice_call_video_url || m.voice_call_video_mobile_url
-                const vcImage = m.voice_call_image_url || m.voice_call_image_mobile_url || m.discovery_image_url || m.avatar_url
-                const isSelected = item.model_id === m.id
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => updateListItem('calls', index, { model_id: m.id })}
-                    style={{
-                      border: isSelected ? '2px solid #4af' : '1px solid #444',
-                      borderRadius: 8,
-                      padding: 4,
-                      background: isSelected ? 'rgba(70,170,255,0.1)' : 'transparent',
-                      cursor: 'pointer',
-                      width: 92,
-                    }}
-                    title={modelName(m)}
-                  >
-                    {vcVideo ? (
-                      <video src={vcVideo} muted loop playsInline style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 6 }} />
-                    ) : (
-                      <img src={vcImage} alt="" style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 6 }} />
-                    )}
-                    <div style={{ fontSize: 10, marginTop: 4, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {modelName(m)}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
+            {/* If already chosen: show only the selected call avatar image (static), name, and "сменить".
+                This removes the "полотно" of 100 models once picked. */}
+            {item.model_id ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <img
+                  src={
+                    modelById[item.model_id]?.voice_call_image_url ||
+                    modelById[item.model_id]?.voice_call_image_mobile_url ||
+                    modelById[item.model_id]?.discovery_image_url ||
+                    modelById[item.model_id]?.avatar_url ||
+                    ''
+                  }
+                  alt=""
+                  style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8, border: '1px solid #444' }}
+                />
+                <div style={{ fontSize: 13, lineHeight: 1.2 }}>
+                  {modelName(modelById[item.model_id] || {})}
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => updateListItem('calls', index, { model_id: '' })}
+                      style={{ fontSize: 11, marginTop: 4 }}
+                    >
+                      сменить
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Picker grid only when nothing chosen yet (or after "сменить").
+                 Uses static images for call avatars as requested. */
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: 420 }}>
+                {models.map((m) => {
+                  const vcImage = m.voice_call_image_url || m.voice_call_image_mobile_url || m.discovery_image_url || m.avatar_url
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => updateListItem('calls', index, { model_id: m.id })}
+                      style={{
+                        border: '1px solid #444',
+                        borderRadius: 6,
+                        padding: 3,
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        width: 68,
+                      }}
+                      title={modelName(m)}
+                    >
+                      <img
+                        src={vcImage || ''}
+                        alt=""
+                        style={{ width: 62, height: 62, objectFit: 'cover', borderRadius: 4 }}
+                      />
+                      <div style={{ fontSize: 9, marginTop: 2, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {modelName(m)}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
 
             <UrlPreview url={modelById[item.model_id]?.voice_call_video_url || modelById[item.model_id]?.voice_call_image_url} kind="video" />
             <button type="button" className="dangerButton" onClick={() => removeListItem('calls', index)}>Удалить</button>
