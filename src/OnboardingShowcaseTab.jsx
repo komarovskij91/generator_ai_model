@@ -38,7 +38,20 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
 
   const current = (config.variants && config.variants[variant]) || emptyVariant()
   const modelById = useMemo(() => Object.fromEntries(models.map((m) => [m.id, m])), [models])
-  const postById = useMemo(() => Object.fromEntries(posts.map((p) => [p.id, p])), [posts])
+  const postById = useMemo(() => {
+    const map = {}
+    ;(posts || []).forEach((p) => {
+      if (p && p.id) map[p.id] = p
+    })
+    // Include posts loaded per-model (these often have more entries than the global recent-100 list)
+    Object.keys(modelPostsCache || {}).forEach((mid) => {
+      const list = modelPostsCache[mid] || []
+      list.forEach((p) => {
+        if (p && p.id) map[p.id] = p
+      })
+    })
+    return map
+  }, [posts, modelPostsCache])
 
   // Group posts by model_id for filtered selection in the Posts section (fallback)
   const postsByModel = useMemo(() => {
@@ -62,6 +75,13 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
       const data = await res.json()
       const list = Array.isArray(data?.items) ? data.items : []
       setModelPostsCache((prev) => ({ ...prev, [mid]: list }))
+      // Merge into the main posts list so postById (and other lookups) always have the image_url etc.
+      // This ensures previews work even for posts that weren't in the initial global recent-100 fetch.
+      setPosts((prev) => {
+        const existingIds = new Set((prev || []).map((p) => p && p.id))
+        const toAdd = (list || []).filter((p) => p && p.id && !existingIds.has(p.id))
+        return toAdd.length ? [...(prev || []), ...toAdd] : prev
+      })
       return list
     } catch (e) {
       return []
@@ -345,7 +365,12 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
                 ))}
               </select>
 
-              <UrlPreview url={postById[item.post_id]?.image_url} />
+              {/* Prefer the rich post object from the current filtered list (guaranteed to have image_url from the per-model fetch).
+                  Fall back to postById for any global posts. This fixes missing previews for posts outside the global top-100. */}
+              {(() => {
+                const previewPost = filteredPosts.find((p) => p.id === item.post_id) || postById[item.post_id]
+                return <UrlPreview url={previewPost?.image_url} />
+              })()}
               <button type="button" className="dangerButton" onClick={() => removeListItem('posts', index)}>Удалить</button>
             </div>
           )
