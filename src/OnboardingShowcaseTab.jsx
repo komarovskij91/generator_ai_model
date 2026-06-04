@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-const emptyMode = () => ({ models: [], posts: [], calls: [] })
-const emptyConfig = () => ({ version: 1, start: 'all', modes: { all: emptyMode(), girl: emptyMode() } })
+const emptyVariant = () => ({ models: [], posts: [], calls: [] })
+const emptyConfig = () => ({
+  version: 1,
+  variants: { config1: emptyVariant(), config2: emptyVariant() },
+  active_key: 'config1',
+  active: emptyVariant(),
+})
 
-const modeLabels = {
-  all: 'All (для App Store: девушки + аниме + парни)',
-  girl: 'Girl (только девушки/аниме)',
+const variantLabels = {
+  config1: 'Конфиг 1',
+  config2: 'Конфиг 2',
 }
 
 const modelName = (model) =>
@@ -27,13 +32,24 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
   const [config, setConfig] = useState(emptyConfig)
   const [models, setModels] = useState([])
   const [posts, setPosts] = useState([])
-  const [mode, setMode] = useState('all')
+  const [variant, setVariant] = useState('config1')
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const current = config.modes?.[mode] || emptyMode()
+  const current = (config.variants && config.variants[variant]) || emptyVariant()
   const modelById = useMemo(() => Object.fromEntries(models.map((m) => [m.id, m])), [models])
   const postById = useMemo(() => Object.fromEntries(posts.map((p) => [p.id, p])), [posts])
+
+  // Group posts by model_id for filtered selection in the Posts section
+  const postsByModel = useMemo(() => {
+    const map = {}
+    ;(posts || []).forEach((p) => {
+      const mid = p.model_id || p.modelId || ''
+      if (!map[mid]) map[mid] = []
+      map[mid].push(p)
+    })
+    return map
+  }, [posts])
 
   const refresh = useCallback(async () => {
     if (!isActive) return
@@ -47,15 +63,22 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
       const cfg = await cfgRes.json()
       const modelData = await modelRes.json()
       const postData = await postRes.json()
-      const loadedStart = (cfg.start || 'all').toString().trim().toLowerCase() === 'girl' ? 'girl' : 'all'
+      // Migrate old shape if needed
+      const loadedVariants = cfg.variants || (cfg.modes ? {
+        config1: cfg.modes.all || emptyVariant(),
+        config2: cfg.modes.girl || emptyVariant(),
+      } : emptyConfig().variants)
+      const loadedActiveKey = cfg.active_key || (cfg.start && (cfg.start.toLowerCase() === 'girl' ? 'config2' : 'config1')) || 'config1'
       setConfig({
         ...emptyConfig(),
         ...cfg,
-        start: loadedStart,
-        modes: { ...emptyConfig().modes, ...(cfg.modes || {}) },
+        variants: { ...emptyConfig().variants, ...loadedVariants },
+        active_key: loadedActiveKey,
+        active: cfg.active || loadedVariants[loadedActiveKey] || emptyVariant(),
       })
       setModels(Array.isArray(modelData.items) ? modelData.items : [])
       setPosts(Array.isArray(postData.items) ? postData.items : [])
+      setVariant(loadedActiveKey) // default to the current active tab
       setStatus('Onboarding showcase загружен')
     } catch (error) {
       setStatus(`Ошибка загрузки: ${error.message}`)
@@ -68,19 +91,47 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
     if (isActive) refresh()
   }, [isActive, refresh])
 
-  const updateMode = (patch) => {
+  const updateVariant = (patch) => {
     setConfig((prev) => ({
       ...prev,
-      modes: {
-        ...prev.modes,
-        [mode]: { ...emptyMode(), ...(prev.modes?.[mode] || {}), ...patch },
+      variants: {
+        ...prev.variants,
+        [variant]: { ...emptyVariant(), ...(prev.variants?.[variant] || {}), ...patch },
       },
     }))
   }
 
-  const setActiveStart = (newStart) => {
-    const normalized = newStart === 'girl' ? 'girl' : 'all'
-    setConfig((prev) => ({ ...prev, start: normalized }))
+  const promoteToActive = async (key) => {
+    if (!key) return
+    setBusy(true)
+    try {
+      const chosen = (config.variants && config.variants[key]) || emptyVariant()
+      const next = {
+        ...config,
+        active_key: key,
+        active: { ...emptyVariant(), ...chosen },
+      }
+      setConfig(next)
+      // Save the full editor config (includes active)
+      const res = await adminFetch('/admin/onboarding/showcase-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(next),
+      })
+      const saved = await res.json()
+      setConfig({
+        ...emptyConfig(),
+        ...saved,
+        variants: { ...emptyConfig().variants, ...(saved.variants || saved.modes || {}) },
+        active_key: saved.active_key || key,
+        active: saved.active || chosen,
+      })
+      setStatus(`Конфиг ${key === 'config1' ? '1' : '2'} теперь основной для приложения`)
+    } catch (error) {
+      setStatus(`Ошибка сохранения активного: ${error.message}`)
+    } finally {
+      setBusy(false)
+    }
   }
 
   const save = async () => {
@@ -91,7 +142,19 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
       })
-      setConfig(await res.json())
+      const saved = await res.json()
+      const loadedVariants = saved.variants || (saved.modes ? {
+        config1: saved.modes.all || emptyVariant(),
+        config2: saved.modes.girl || emptyVariant(),
+      } : emptyConfig().variants)
+      const loadedActiveKey = saved.active_key || 'config1'
+      setConfig({
+        ...emptyConfig(),
+        ...saved,
+        variants: { ...emptyConfig().variants, ...loadedVariants },
+        active_key: loadedActiveKey,
+        active: saved.active || loadedVariants[loadedActiveKey] || emptyVariant(),
+      })
       setStatus('Сохранено')
     } catch (error) {
       setStatus(`Ошибка сохранения: ${error.message}`)
@@ -119,7 +182,7 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
     }
   }
 
-  const updateList = (section, items) => updateMode({ [section]: items })
+  const updateList = (section, items) => updateVariant({ [section]: items })
   const updateListItem = (section, index, patch) => {
     const next = [...(current[section] || [])]
     next[index] = { ...next[index], ...patch }
@@ -141,9 +204,9 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
           <div>
             <h2>Onboarding showcase</h2>
             <p className="fieldHint">
-              Настройка нового iOS onboarding: модели, посты, звонки. Есть два режима: <code>all</code> и <code>girl</code>.
+              Здесь ты собираешь два варианта контента для пост-логин онбординга в приложении (модели, посты, звонки).
               <br />
-              <strong>Источник истины для приложения — этот конфиг + поле start ниже.</strong> Старый onboarding_config.json больше не используется для выбора контента после логина. (updated 2026-06-04)
+              Приложение всегда делает один и тот же запрос и получает то, что ты здесь "сделал основным". Старый onboarding_config.json для этого не используется.
             </p>
           </div>
           <div className="miniRow">
@@ -153,8 +216,8 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
         </div>
         {status ? <p className="status">{status}</p> : null}
         <div className="tabs">
-          {Object.entries(modeLabels).map(([key, label]) => (
-            <button key={key} type="button" className={mode === key ? 'topTab active' : 'topTab'} onClick={() => setMode(key)}>
+          {Object.entries(variantLabels).map(([key, label]) => (
+            <button key={key} type="button" className={variant === key ? 'topTab active' : 'topTab'} onClick={() => setVariant(key)}>
               {label}
             </button>
           ))}
@@ -162,35 +225,32 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
 
         <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #333' }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>
-            Активный режим для приложения (источник истины)
+            Сделать этот конфиг основным для приложения
           </div>
           <p className="fieldHint" style={{ marginBottom: 8 }}>
-            Выбери, какой набор (all или girl) будет использоваться в приложении по умолчанию.
-            После логина приложение запросит конфиг, возьмёт отсюда <code>start</code> и покажет контент из соответствующего режима.
-            Это позволяет быстро переключать «безопасный для ревью App Store» / «полный».
+            В приложении всегда один и тот же запрос. Здесь ты выбираешь, какой из двух своих конфигов (Конфиг 1 или Конфиг 2) сейчас является "истинно верным" и будет показан пользователям после логина.
+            Нажми кнопку ниже — этот вариант сохранится как активный в Redis.
           </p>
           <div className="miniRow">
             <button
               type="button"
-              className={config.start === 'all' ? 'topTab active' : 'topTab'}
-              onClick={() => setActiveStart('all')}
               disabled={busy}
+              onClick={() => promoteToActive('config1')}
             >
-              All — девушки + аниме + парни (рекомендуется для App Store)
+              Сделать Конфиг 1 основным для приложения
             </button>
             <button
               type="button"
-              className={config.start === 'girl' ? 'topTab active' : 'topTab'}
-              onClick={() => setActiveStart('girl')}
               disabled={busy}
+              onClick={() => promoteToActive('config2')}
             >
-              Girl — только девушки/аниме
+              Сделать Конфиг 2 основным для приложения
             </button>
           </div>
           <div style={{ marginTop: 6 }}>
-            <span className="fieldHint">Сейчас в конфиге указано: </span>
-            <strong>{config.start === 'girl' ? 'girl' : 'all'}</strong>
-            <span className="fieldHint"> — приложение будет загружать именно этот режим для пост-логин онбординга.</span>
+            <span className="fieldHint">Сейчас активен: </span>
+            <strong>{config.active_key === 'config2' ? 'Конфиг 2' : 'Конфиг 1'}</strong>
+            <span className="fieldHint"> — приложение получит именно этот контент при следующем запросе.</span>
           </div>
         </div>
       </article>
@@ -221,32 +281,88 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
 
       <ShowcaseSection
         title="2. Посты"
-        hint="Выбери опубликованные посты для второго экрана onboarding."
+        hint="Сначала выбери модель — увидишь только её посты. Тыкни на нужный пост. Приложение получит именно его."
         items={current.posts || []}
         onAdd={() => addPost()}
-        renderItem={(item, index) => (
-          <div className="showcaseRow compact" key={`post-${index}`}>
-            <select value={item.post_id || ''} onChange={(e) => updateListItem('posts', index, { post_id: e.target.value })}>
-              <option value="">— пост —</option>
-              {posts.map((p) => <option key={p.id} value={p.id}>{postName(p)}</option>)}
-            </select>
-            <UrlPreview url={postById[item.post_id]?.image_url} />
-            <button type="button" className="dangerButton" onClick={() => removeListItem('posts', index)}>Удалить</button>
-          </div>
-        )}
+        renderItem={(item, index) => {
+          const chosenModelForPost = item.model_id || ''
+          const filteredPosts = postsByModel[chosenModelForPost] || []
+          return (
+            <div className="showcaseRow compact" key={`post-${index}`}>
+              {/* Model first, then only its posts */}
+              <select
+                value={chosenModelForPost}
+                onChange={(e) => {
+                  const newMid = e.target.value
+                  // reset post when model changes
+                  updateListItem('posts', index, { model_id: newMid, post_id: '' })
+                }}
+              >
+                <option value="">— модель —</option>
+                {models.map((m) => (
+                  <option key={m.id} value={m.id}>{modelName(m)} · {m.id}</option>
+                ))}
+              </select>
+
+              <select
+                value={item.post_id || ''}
+                onChange={(e) => updateListItem('posts', index, { post_id: e.target.value, model_id: chosenModelForPost })}
+                disabled={!chosenModelForPost}
+              >
+                <option value="">— пост этой модели —</option>
+                {filteredPosts.map((p) => (
+                  <option key={p.id} value={p.id}>{postName(p)}</option>
+                ))}
+              </select>
+
+              <UrlPreview url={postById[item.post_id]?.image_url} />
+              <button type="button" className="dangerButton" onClick={() => removeListItem('posts', index)}>Удалить</button>
+            </div>
+          )
+        }}
       />
 
       <ShowcaseSection
         title="3. Звонки"
-        hint="Выбери модели для экрана звонков. Видео/аудио берутся из voice_call и bio_short_audio_i18n модели."
+        hint="Кликни по аватарке созвона (voice call media) — модель добавится. Так проще понять, кого выбираешь для звонков."
         items={current.calls || []}
         onAdd={() => addModel('calls')}
         renderItem={(item, index) => (
           <div className="showcaseRow compact" key={`call-${index}`}>
-            <select value={item.model_id || ''} onChange={(e) => updateListItem('calls', index, { model_id: e.target.value })}>
-              <option value="">— модель —</option>
-              {models.map((m) => <option key={m.id} value={m.id}>{modelName(m)} · {m.id}</option>)}
-            </select>
+            {/* Visual picker with voice call avatars */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxWidth: 420 }}>
+              {models.map((m) => {
+                const vcVideo = m.voice_call_video_url || m.voice_call_video_mobile_url
+                const vcImage = m.voice_call_image_url || m.voice_call_image_mobile_url || m.discovery_image_url || m.avatar_url
+                const isSelected = item.model_id === m.id
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => updateListItem('calls', index, { model_id: m.id })}
+                    style={{
+                      border: isSelected ? '2px solid #4af' : '1px solid #444',
+                      borderRadius: 8,
+                      padding: 4,
+                      background: isSelected ? 'rgba(70,170,255,0.1)' : 'transparent',
+                      cursor: 'pointer',
+                      width: 92,
+                    }}
+                    title={modelName(m)}
+                  >
+                    {vcVideo ? (
+                      <video src={vcVideo} muted loop playsInline style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 6 }} />
+                    ) : (
+                      <img src={vcImage} alt="" style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 6 }} />
+                    )}
+                    <div style={{ fontSize: 10, marginTop: 4, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {modelName(m)}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+
             <UrlPreview url={modelById[item.model_id]?.voice_call_video_url || modelById[item.model_id]?.voice_call_image_url} kind="video" />
             <button type="button" className="dangerButton" onClick={() => removeListItem('calls', index)}>Удалить</button>
           </div>
