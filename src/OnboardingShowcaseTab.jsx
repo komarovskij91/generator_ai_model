@@ -391,34 +391,38 @@ export default function OnboardingShowcaseTab({ adminFetch, isActive }) {
               /* Picker grid only when nothing chosen yet (or after "сменить").
                  Uses static images for call avatars as requested. */
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: 420 }}>
-                {models.map((m) => {
-                  const vcImage = m.voice_call_image_url || m.voice_call_image_mobile_url || m.discovery_image_url || m.avatar_url
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => updateListItem('calls', index, { model_id: m.id })}
-                      style={{
-                        border: '1px solid #444',
-                        borderRadius: 6,
-                        padding: 3,
-                        background: 'transparent',
-                        cursor: 'pointer',
-                        width: 68,
-                      }}
-                      title={modelName(m)}
-                    >
-                      <img
-                        src={vcImage || ''}
-                        alt=""
-                        style={{ width: 62, height: 62, objectFit: 'cover', borderRadius: 4 }}
-                      />
-                      <div style={{ fontSize: 9, marginTop: 2, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {modelName(m)}
-                      </div>
-                    </button>
-                  )
-                })}
+                {(() => {
+                  const callReady = models.filter(m => m.voice_call_image_url || m.voice_call_image_mobile_url || m.voice_call_video_url || m.voice_call_video_mobile_url)
+                  const toShow = callReady.length > 0 ? callReady : models
+                  return toShow.map((m) => {
+                    const vcImage = m.voice_call_image_url || m.voice_call_image_mobile_url || m.discovery_image_url || m.avatar_url
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => updateListItem('calls', index, { model_id: m.id })}
+                        style={{
+                          border: '1px solid #444',
+                          borderRadius: 6,
+                          padding: 3,
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          width: 68,
+                        }}
+                        title={modelName(m)}
+                      >
+                        <img
+                          src={vcImage || ''}
+                          alt=""
+                          style={{ width: 62, height: 62, objectFit: 'cover', borderRadius: 4 }}
+                        />
+                        <div style={{ fontSize: 9, marginTop: 2, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {modelName(m)}
+                        </div>
+                      </button>
+                    )
+                  })
+                })()}
               </div>
             )}
 
