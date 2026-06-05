@@ -305,7 +305,17 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     setBusy(true)
     setStatus('Запускаем генерацию видео для поста…')
     try {
-      await adminFetch(`/admin/feed/drafts/${encodeURIComponent(draft.id)}/video/start`, { method: 'POST' })
+      // Send the currently highlighted/selected candidate from local edits (or fall back to draft's).
+      // This ensures "click image to highlight -> click generate video" uses exactly that image,
+      // even if user didn't press "Сохранить правки" yet. Backend will persist the choice too.
+      const edit = draftEdits[draft.id] || {}
+      const effectiveSelected = edit.selected_candidate_id || draft.selected_candidate_id
+      const body = effectiveSelected ? { selected_candidate_id: effectiveSelected } : {}
+      await adminFetch(`/admin/feed/drafts/${encodeURIComponent(draft.id)}/video/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
       await refreshAll(true)
       setStatus('Генерация видео запущена (Kling)')
     } catch (error) {
@@ -551,12 +561,21 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                       key={candidate.id}
                       type="button"
                       className={selectedId === candidate.id ? 'feedCandidate active' : 'feedCandidate'}
-                      onClick={() =>
+                      onClick={async () => {
+                        // Update local edit state for immediate UI (and for other batched fields)
                         setDraftEdits((prev) => ({
                           ...prev,
                           [draft.id]: { ...(prev[draft.id] || {}), selected_candidate_id: candidate.id },
                         }))
-                      }
+                        // Immediately persist the image selection to server.
+                        // This makes "just highlight the image you want -> generate video (or save post)" reliable,
+                        // and the choice survives refresh. Other caption/flag edits still use explicit "Сохранить правки".
+                        try {
+                          await patchDraft(draft.id, { selected_candidate_id: candidate.id })
+                        } catch (e) {
+                          // Non-fatal: local state has the choice; video gen and save flows will re-apply the patch.
+                        }
+                      }}
                     >
                       <img src={candidate.image_url} alt={candidate.id} loading="lazy" decoding="async" />
                       <span>{selectedId === candidate.id ? 'Выбрано' : 'Выбрать'}</span>
