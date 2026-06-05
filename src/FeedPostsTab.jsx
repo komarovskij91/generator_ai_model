@@ -58,11 +58,17 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
   const draftPageRef = useRef(emptyPage)
   const readyPageRef = useRef(emptyPage)
   const publishedPageRef = useRef(emptyPage)
+  const draftsRef = useRef([])
 
   const setDraftPageState = useCallback((nextPage) => {
     draftPageRef.current = nextPage
     setDraftPage(nextPage)
   }, [])
+
+  // Keep a ref to latest drafts so polling interval can read fresh value without causing effect re-runs
+  useEffect(() => {
+    draftsRef.current = drafts
+  }, [drafts])
 
   const setReadyPageState = useCallback((nextPage) => {
     readyPageRef.current = nextPage
@@ -171,8 +177,11 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     // Auto-refresh while there is pending generation work (images or video for drafts,
     // or recently started video on ready/published posts). This makes status/candidates/video
     // appear without manual "Скрыть/Показать" toggle.
+    // Use draftsRef so we don't put `drafts` in deps (which was causing repeated refreshAll calls
+    // and stuck "Подгружаю черновики…" loading indicator when the list is empty).
     const interval = setInterval(() => {
-      const hasPendingDraft = drafts.some((d) => {
+      const currentDrafts = draftsRef.current || []
+      const hasPendingDraft = currentDrafts.some((d) => {
         const st = (d.status || '').toLowerCase()
         const vst = (d.video_status || '').toLowerCase()
         return st.includes('generat') || st.includes('queued') || ['queued', 'running', 'prompting'].includes(vst)
@@ -184,7 +193,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     }, 11000)
 
     return () => clearInterval(interval)
-  }, [isActive, refreshAll, drafts, showReadyPosts, showPublishedPosts])
+  }, [isActive, refreshAll, showReadyPosts, showPublishedPosts])
 
   const uploadFiles = async (files) => {
     const picked = Array.from(files || []).filter(Boolean)
@@ -775,6 +784,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
             disabled={!isActive || !draftPage.hasMore || draftPage.isLoading}
             onLoadMore={() => loadDrafts()}
           />
+          {/* Only show the sub-loading hint during an active fetch; the repeated isLoading was caused by effect depending on `drafts` which triggered refresh loops when list was empty. Fixed by using ref for polling decision. */}
           {draftPage.isLoading ? <p className="fieldHint">Подгружаю черновики…</p> : null}
         </div>
       </section>
