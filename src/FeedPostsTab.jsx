@@ -363,9 +363,33 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
     try {
       await adminFetch(`/admin/feed/posts/${encodeURIComponent(postId)}/video/start`, { method: 'POST' })
       await refreshAll(true)
-      setStatus('Видео для поста запущено')
+      setStatus('Видео для поста запущено (отслеживайте статус в карточке)')
     } catch (error) {
       setStatus(`Видео для поста: ${error.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const applyVideoForPost = async (postId) => {
+    if (!window.confirm(
+      'Применить это видео к посту?\n\n' +
+      '• Оригинальный файл будет сохранён на R2 как video_original.\n' +
+      '• Основная версия (video_url) будет оптимизирована через блюр-сервис без блюра (меньше размер, .m4v).\n' +
+      '• Если пост помечен «Платный» с ценой — будет сгенерирована заблюренная превью-версия (video_preview_url) из оригинала.\n' +
+      '• Пост станет видео-постом (is_video=true).\n\n' +
+      'Продолжить?'
+    )) {
+      return
+    }
+    setBusy(true)
+    setStatus('Применяем видео к посту (сохраняем оригинал + оптимизируем + при необходимости блюр)...')
+    try {
+      await adminFetch(`/admin/feed/posts/${encodeURIComponent(postId)}/video/apply`, { method: 'POST' })
+      await refreshAll(true)
+      setStatus('Видео применено к посту. Основная версия — без блюра.')
+    } catch (error) {
+      setStatus(`Применить видео: ${error.message}`)
     } finally {
       setBusy(false)
     }
@@ -675,7 +699,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                     {draft.video_url ? (
                       <div>
                         <div style={{ marginBottom: 6, fontSize: 12, opacity: 0.8 }}>
-                          Видео для поста (основное, оптимизированное через blur-сервис sigma=0):
+                          Видео для поста (raw из Kling — для просмотра). При «Сохранить как ВИДЕО пост» будет: оригинал на R2 + оптимизированная без блюра (main video_url) + (если платный) блюр превью из оригинала.
                         </div>
                         <video
                           controls
@@ -867,18 +891,47 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                   {postFlagControls(post)}
                 </div>
                 <div className="miniRow feedActions">
-                  {!post.video_url ? (
-                    <button type="button" disabled={busy} onClick={() => generateVideoForPost(post.id)}>
-                      Сгенерировать видео
-                    </button>
-                  ) : (
-                    <>
-                      <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
-                      <button type="button" disabled={busy} onClick={() => reoptimizeVideoForPost(post.id)}>
-                        Уменьшить видео (re-optimize)
-                      </button>
-                    </>
-                  )}
+                  {(() => {
+                    const vs = (post.video_status || '').toLowerCase()
+                    const isGen = ['queued', 'prompting', 'running'].includes(vs)
+                    const isReview = vs === 'review' && post.video_url
+                    if (isGen) {
+                      return (
+                        <span style={{ fontSize: 11, opacity: 0.85 }}>
+                          {post.video_status_ru || post.video_status}
+                          {post.video_error ? ` — ${post.video_error}` : ''}
+                        </span>
+                      )
+                    }
+                    if (isReview) {
+                      return (
+                        <>
+                          <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
+                          <button type="button" disabled={busy} onClick={() => applyVideoForPost(post.id)}>
+                            Применить видео
+                          </button>
+                        </>
+                      )
+                    }
+                    if (!post.is_video && (!post.video_status || vs === 'failed')) {
+                      return (
+                        <button type="button" disabled={busy} onClick={() => generateVideoForPost(post.id)}>
+                          Сгенерировать видео
+                        </button>
+                      )
+                    }
+                    if (post.video_url) {
+                      return (
+                        <>
+                          <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
+                          <button type="button" disabled={busy} onClick={() => reoptimizeVideoForPost(post.id)}>
+                            Уменьшить видео (re-optimize)
+                          </button>
+                        </>
+                      )
+                    }
+                    return null
+                  })()}
                   <button type="button" disabled={busy} onClick={() => publishPost(post.id)}>
                     Опубликовать
                   </button>
@@ -946,18 +999,47 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                   {postFlagControls(post)}
                 </div>
                 <div className="miniRow feedActions">
-                  {!post.video_url ? (
-                    <button type="button" disabled={busy} onClick={() => generateVideoForPost(post.id)}>
-                      Сгенерировать видео
-                    </button>
-                  ) : (
-                    <>
-                      <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
-                      <button type="button" disabled={busy} onClick={() => reoptimizeVideoForPost(post.id)}>
-                        Уменьшить видео (re-optimize)
-                      </button>
-                    </>
-                  )}
+                  {(() => {
+                    const vs = (post.video_status || '').toLowerCase()
+                    const isGen = ['queued', 'prompting', 'running'].includes(vs)
+                    const isReview = vs === 'review' && post.video_url
+                    if (isGen) {
+                      return (
+                        <span style={{ fontSize: 11, opacity: 0.85 }}>
+                          {post.video_status_ru || post.video_status}
+                          {post.video_error ? ` — ${post.video_error}` : ''}
+                        </span>
+                      )
+                    }
+                    if (isReview) {
+                      return (
+                        <>
+                          <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
+                          <button type="button" disabled={busy} onClick={() => applyVideoForPost(post.id)}>
+                            Применить видео
+                          </button>
+                        </>
+                      )
+                    }
+                    if (!post.is_video && (!post.video_status || vs === 'failed')) {
+                      return (
+                        <button type="button" disabled={busy} onClick={() => generateVideoForPost(post.id)}>
+                          Сгенерировать видео
+                        </button>
+                      )
+                    }
+                    if (post.video_url) {
+                      return (
+                        <>
+                          <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
+                          <button type="button" disabled={busy} onClick={() => reoptimizeVideoForPost(post.id)}>
+                            Уменьшить видео (re-optimize)
+                          </button>
+                        </>
+                      )
+                    }
+                    return null
+                  })()}
                   <button type="button" className="secondaryMuted" disabled={busy} onClick={() => deletePost(post.id)}>
                     Удалить
                   </button>
