@@ -372,38 +372,14 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
   }
 
   const applyVideoForPost = async (postId) => {
-    if (!window.confirm(
-      'Применить это видео к посту?\n\n' +
-      '• Оригинальный файл будет сохранён на R2 как video_original.\n' +
-      '• Основная версия (video_url) будет оптимизирована через блюр-сервис без блюра (меньше размер, .m4v).\n' +
-      '• Если пост помечен «Платный» с ценой — будет сгенерирована заблюренная превью-версия (video_preview_url) из оригинала.\n' +
-      '• Пост станет видео-постом (is_video=true).\n\n' +
-      'Продолжить?'
-    )) {
-      return
-    }
     setBusy(true)
-    setStatus('Применяем видео к посту (сохраняем оригинал + оптимизируем + при необходимости блюр)...')
+    setStatus('Применяем видео к посту (сохраняем оригинал + оптимизируем без блюра + при необходимости блюр-превью)...')
     try {
       await adminFetch(`/admin/feed/posts/${encodeURIComponent(postId)}/video/apply`, { method: 'POST' })
       await refreshAll(true)
       setStatus('Видео применено к посту. Основная версия — без блюра.')
     } catch (error) {
       setStatus(`Применить видео: ${error.message}`)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const reoptimizeVideoForPost = async (postId) => {
-    setBusy(true)
-    setStatus('Ре-оптимизируем видео (sigma=0 через blur-сервис, без новой генерации Kling)…')
-    try {
-      await adminFetch(`/admin/feed/posts/${encodeURIComponent(postId)}/video/optimize`, { method: 'POST' })
-      await refreshAll(true)
-      setStatus('Видео ре-оптимизировано (должен стать легче)')
-    } catch (error) {
-      setStatus(`Re-optimize видео: ${error.message}`)
     } finally {
       setBusy(false)
     }
@@ -922,12 +898,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                     }
                     if (post.video_url) {
                       return (
-                        <>
-                          <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
-                          <button type="button" disabled={busy} onClick={() => reoptimizeVideoForPost(post.id)}>
-                            Уменьшить видео (re-optimize)
-                          </button>
-                        </>
+                        <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
                       )
                     }
                     return null
@@ -1030,12 +1001,7 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                     }
                     if (post.video_url) {
                       return (
-                        <>
-                          <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
-                          <button type="button" disabled={busy} onClick={() => reoptimizeVideoForPost(post.id)}>
-                            Уменьшить видео (re-optimize)
-                          </button>
-                        </>
+                        <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
                       )
                     }
                     return null
