@@ -805,7 +805,26 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
           <div className="feedPreparedList">
             {readyPosts.map((post) => (
               <article key={post.id} className="feedPreparedCard">
-                <img src={post.image_url} alt={post.id} loading="lazy" decoding="async" />
+                <div style={{ position: 'relative' }}>
+                  <img src={post.image_url} alt={post.id} loading="lazy" decoding="async" />
+                  {post.video_url ? (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 6,
+                      right: 6,
+                      background: 'rgba(0,0,0,0.6)',
+                      color: 'white',
+                      fontSize: 10,
+                      padding: '1px 4px',
+                      borderRadius: 3,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 2
+                    }}>
+                      🎥
+                    </div>
+                  ) : null}
+                </div>
                 <div className="feedPreparedMeta">
                   <strong>{post.model_name}</strong>
                   <span>{post.status_ru} {post.video_url ? '🎥' : ''}</span>
@@ -861,7 +880,26 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
           <div className="feedPreparedList">
             {publishedPosts.map((post) => (
               <article key={post.id} className="feedPreparedCard">
-                <img src={post.image_url} alt={post.id} loading="lazy" decoding="async" />
+                <div style={{ position: 'relative' }}>
+                  <img src={post.image_url} alt={post.id} loading="lazy" decoding="async" />
+                  {post.video_url ? (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 6,
+                      right: 6,
+                      background: 'rgba(0,0,0,0.6)',
+                      color: 'white',
+                      fontSize: 10,
+                      padding: '1px 4px',
+                      borderRadius: 3,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 2
+                    }}>
+                      🎥
+                    </div>
+                  ) : null}
+                </div>
                 <div className="feedPreparedMeta">
                   <strong>{post.model_name}</strong>
                   <span>
