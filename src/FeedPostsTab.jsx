@@ -167,8 +167,24 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
   useEffect(() => {
     if (!isActive) return undefined
     refreshAll()
-    return undefined
-  }, [isActive, refreshAll])
+
+    // Auto-refresh while there is pending generation work (images or video for drafts,
+    // or recently started video on ready/published posts). This makes status/candidates/video
+    // appear without manual "Скрыть/Показать" toggle.
+    const interval = setInterval(() => {
+      const hasPendingDraft = drafts.some((d) => {
+        const st = (d.status || '').toLowerCase()
+        const vst = (d.video_status || '').toLowerCase()
+        return st.includes('generat') || st.includes('queued') || ['queued', 'running', 'prompting'].includes(vst)
+      })
+      const hasOpenPostLists = showReadyPosts || showPublishedPosts
+      if (hasPendingDraft || hasOpenPostLists) {
+        refreshAll(true).catch(() => {})
+      }
+    }, 11000)
+
+    return () => clearInterval(interval)
+  }, [isActive, refreshAll, drafts, showReadyPosts, showPublishedPosts])
 
   const uploadFiles = async (files) => {
     const picked = Array.from(files || []).filter(Boolean)
@@ -334,6 +350,20 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
       setStatus('Видео для поста запущено')
     } catch (error) {
       setStatus(`Видео для поста: ${error.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const reoptimizeVideoForPost = async (postId) => {
+    setBusy(true)
+    setStatus('Ре-оптимизируем видео (sigma=0 через blur-сервис, без новой генерации Kling)…')
+    try {
+      await adminFetch(`/admin/feed/posts/${encodeURIComponent(postId)}/video/optimize`, { method: 'POST' })
+      await refreshAll(true)
+      setStatus('Видео ре-оптимизировано (должен стать легче)')
+    } catch (error) {
+      setStatus(`Re-optimize видео: ${error.message}`)
     } finally {
       setBusy(false)
     }
@@ -600,7 +630,9 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
 
                     {draft.video_url ? (
                       <div>
-                        <div style={{ marginBottom: 6, fontSize: 12, opacity: 0.8 }}>Видео для поста (превью):</div>
+                        <div style={{ marginBottom: 6, fontSize: 12, opacity: 0.8 }}>
+                          Видео для поста (основное, оптимизированное через blur-сервис sigma=0):
+                        </div>
                         <video
                           controls
                           style={{ width: '100%', maxWidth: 420, borderRadius: 8, background: '#111' }}
@@ -774,7 +806,12 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                       Сгенерировать видео
                     </button>
                   ) : (
-                    <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
+                    <>
+                      <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
+                      <button type="button" disabled={busy} onClick={() => reoptimizeVideoForPost(post.id)}>
+                        Уменьшить видео (re-optimize)
+                      </button>
+                    </>
                   )}
                   <button type="button" disabled={busy} onClick={() => publishPost(post.id)}>
                     Опубликовать
@@ -829,7 +866,12 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                       Сгенерировать видео
                     </button>
                   ) : (
-                    <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
+                    <>
+                      <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
+                      <button type="button" disabled={busy} onClick={() => reoptimizeVideoForPost(post.id)}>
+                        Уменьшить видео (re-optimize)
+                      </button>
+                    </>
                   )}
                   <button type="button" className="secondaryMuted" disabled={busy} onClick={() => deletePost(post.id)}>
                     Удалить
