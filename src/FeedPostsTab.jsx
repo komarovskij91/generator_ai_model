@@ -299,6 +299,13 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ use_video: false })
       })
+      // Immediately remove from local list (draft disappears instantly after save choice)
+      setDrafts((prev) => prev.filter((d) => d.id !== draft.id))
+      setDraftEdits((prev) => {
+        const next = { ...prev }
+        delete next[draft.id]
+        return next
+      })
       await refreshAll(true)
       setStatus('Пост сохранён в подготовленные')
     } catch (error) {
@@ -387,6 +394,14 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ use_video: !!useVideo })
+      })
+      // Immediately remove from local list so draft disappears without waiting for next poll/refresh.
+      // The backend already excludes saved drafts, refresh will keep it consistent.
+      setDrafts((prev) => prev.filter((d) => d.id !== draft.id))
+      setDraftEdits((prev) => {
+        const next = { ...prev }
+        delete next[draft.id]
+        return next
       })
       await refreshAll(true)
       setStatus(useVideo ? 'Сохранён как видео пост' : 'Сохранён как фото пост')
@@ -625,6 +640,26 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                 {/* Video for post generation (from selected image, Kling video flow) */}
                 {selectedId ? (
                   <div className="feedVideoSection" style={{ margin: '12px 0' }}>
+                    {/* Progress / status for long Kling video gen - better than plain text */}
+                    {draft.video_status && !draft.video_url && draft.video_status !== 'done' ? (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 4 }}>
+                          {draft.video_status_ru || draft.video_status}
+                          {draft.video_error ? ` — ${draft.video_error}` : ''}
+                        </div>
+                        <progress
+                          value={
+                            draft.video_status === 'queued' ? 15 :
+                            draft.video_status === 'prompting' ? 40 :
+                            draft.video_status === 'running' ? 85 : 60
+                          }
+                          max="100"
+                          style={{ width: '100%', height: 8 }}
+                        />
+                        <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>Генерация видео может занять 1–3 минуты…</div>
+                      </div>
+                    ) : null}
+
                     {!draft.video_url && draft.video_status !== 'done' ? (
                       <button
                         type="button"
