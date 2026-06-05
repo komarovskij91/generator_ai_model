@@ -780,11 +780,13 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
           {drafts.length > 0 ? (
             <p className="fieldHint">Показано {drafts.length} из {draftPage.totalCount}</p>
           ) : null}
-          <LoadMoreTrigger
-            disabled={!isActive || !draftPage.hasMore || draftPage.isLoading}
-            onLoadMore={() => loadDrafts()}
-          />
-          {/* Only show the sub-loading hint during an active fetch; the repeated isLoading was caused by effect depending on `drafts` which triggered refresh loops when list was empty. Fixed by using ref for polling decision. */}
+          {/* Only render the infinite-scroll sentinel when there might be more. This + the ref-based polling prevents the "Подгружаю черновики…" from ever getting stuck when the list is (and stays) empty. */}
+          {draftPage.hasMore ? (
+            <LoadMoreTrigger
+              disabled={!isActive || draftPage.isLoading}
+              onLoadMore={() => loadDrafts()}
+            />
+          ) : null}
           {draftPage.isLoading ? <p className="fieldHint">Подгружаю черновики…</p> : null}
         </div>
       </section>
