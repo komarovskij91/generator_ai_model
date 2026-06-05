@@ -264,11 +264,16 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
   }
 
   const saveDraftToPost = async (draft) => {
+    // Default save from the main button treats as photo (even if video generated, user should use the explicit video choice buttons)
     setBusy(true)
     try {
       const edit = draftEdits[draft.id] || {}
       await patchDraft(draft.id, draftPatchFromEdit(draft, edit))
-      await adminFetch(`/admin/feed/drafts/${encodeURIComponent(draft.id)}/save`, { method: 'POST' })
+      await adminFetch(`/admin/feed/drafts/${encodeURIComponent(draft.id)}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ use_video: false })
+      })
       await refreshAll(true)
       setStatus('Пост сохранён в подготовленные')
     } catch (error) {
@@ -291,6 +296,53 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
       setStatus('Черновик удалён')
     } catch (error) {
       setStatus(`Удаление черновика: ${error.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const generateVideoForDraft = async (draft) => {
+    setBusy(true)
+    setStatus('Запускаем генерацию видео для поста…')
+    try {
+      await adminFetch(`/admin/feed/drafts/${encodeURIComponent(draft.id)}/video/start`, { method: 'POST' })
+      await refreshAll(true)
+      setStatus('Генерация видео запущена (Kling)')
+    } catch (error) {
+      setStatus(`Видео поста: ${error.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const generateVideoForPost = async (postId) => {
+    setBusy(true)
+    setStatus('Генерируем видео для существующего поста…')
+    try {
+      await adminFetch(`/admin/feed/posts/${encodeURIComponent(postId)}/video/start`, { method: 'POST' })
+      await refreshAll(true)
+      setStatus('Видео для поста запущено')
+    } catch (error) {
+      setStatus(`Видео для поста: ${error.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const saveDraftToPostAs = async (draft, useVideo) => {
+    setBusy(true)
+    try {
+      const edit = draftEdits[draft.id] || {}
+      await patchDraft(draft.id, draftPatchFromEdit(draft, edit))
+      await adminFetch(`/admin/feed/drafts/${encodeURIComponent(draft.id)}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ use_video: !!useVideo })
+      })
+      await refreshAll(true)
+      setStatus(useVideo ? 'Сохранён как видео пост' : 'Сохранён как фото пост')
+    } catch (error) {
+      setStatus(`Сохранение поста: ${error.message}`)
     } finally {
       setBusy(false)
     }
@@ -511,6 +563,46 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                     </button>
                   ))}
                 </div>
+
+                {/* Video for post generation (from selected image, Kling video flow) */}
+                {selectedId ? (
+                  <div className="feedVideoSection" style={{ margin: '12px 0' }}>
+                    {!draft.video_url && draft.video_status !== 'done' ? (
+                      <button
+                        type="button"
+                        disabled={busy || (draft.video_status && draft.video_status !== 'failed')}
+                        onClick={() => generateVideoForDraft(draft)}
+                      >
+                        {draft.video_status === 'running' || draft.video_status === 'prompting' || draft.video_status === 'queued'
+                          ? (draft.video_status_ru || 'Генерируем видео…')
+                          : 'Сгенерировать видео для поста'}
+                      </button>
+                    ) : null}
+
+                    {draft.video_url ? (
+                      <div>
+                        <div style={{ marginBottom: 6, fontSize: 12, opacity: 0.8 }}>Видео для поста (превью):</div>
+                        <video
+                          controls
+                          style={{ width: '100%', maxWidth: 420, borderRadius: 8, background: '#111' }}
+                          src={draft.video_url}
+                        />
+                        <div className="miniRow" style={{ marginTop: 8 }}>
+                          <button type="button" disabled={busy} onClick={() => saveDraftToPostAs(draft, true)}>
+                            Сохранить как ВИДЕО пост
+                          </button>
+                          <button type="button" disabled={busy} onClick={() => saveDraftToPostAs(draft, false)}>
+                            Сохранить как ФОТО пост (без видео)
+                          </button>
+                        </div>
+                        <p className="fieldHint" style={{ fontSize: 11 }}>Выберите тип при сохранении. Видео будет использовано если нажать "ВИДЕО пост".</p>
+                      </div>
+                    ) : draft.video_status ? (
+                      <div style={{ fontSize: 12, opacity: 0.75 }}>{draft.video_status_ru || draft.video_status} {draft.video_error ? `— ${draft.video_error}` : ''}</div>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 <div className="grid">
                   {captionFields.map(({ key, label }) => (
                     <div className="card" key={key}>
@@ -653,11 +745,18 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                 <img src={post.image_url} alt={post.id} loading="lazy" decoding="async" />
                 <div className="feedPreparedMeta">
                   <strong>{post.model_name}</strong>
-                  <span>{post.status_ru}</span>
+                  <span>{post.status_ru} {post.video_url ? '🎥' : ''}</span>
                   {post.caption_ru ? <p>{post.caption_ru}</p> : null}
                   {postFlagControls(post)}
                 </div>
                 <div className="miniRow feedActions">
+                  {!post.video_url ? (
+                    <button type="button" disabled={busy} onClick={() => generateVideoForPost(post.id)}>
+                      Сгенерировать видео
+                    </button>
+                  ) : (
+                    <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
+                  )}
                   <button type="button" disabled={busy} onClick={() => publishPost(post.id)}>
                     Опубликовать
                   </button>
@@ -699,12 +798,20 @@ export default function FeedPostsTab({ adminFetch, isActive }) {
                   <strong>{post.model_name}</strong>
                   <span>
                     {post.status_ru}
+                    {post.video_url ? ' 🎥' : ''}
                     {post.published_at ? ` · ${new Date(post.published_at * 1000).toLocaleString('ru-RU')}` : ''}
                   </span>
                   {post.caption_ru ? <p>{post.caption_ru}</p> : null}
                   {postFlagControls(post)}
                 </div>
                 <div className="miniRow feedActions">
+                  {!post.video_url ? (
+                    <button type="button" disabled={busy} onClick={() => generateVideoForPost(post.id)}>
+                      Сгенерировать видео
+                    </button>
+                  ) : (
+                    <video controls style={{ width: 120, height: 80, borderRadius: 4 }} src={post.video_url} />
+                  )}
                   <button type="button" className="secondaryMuted" disabled={busy} onClick={() => deletePost(post.id)}>
                     Удалить
                   </button>
