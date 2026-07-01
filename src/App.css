@@ -96,6 +96,10 @@ button:disabled {
   opacity: 0.5;
 }
 
+.dangerButton {
+  background: #ef4444;
+}
+
 .status {
   margin-top: 12px;
   font-weight: 600;
@@ -142,6 +146,55 @@ pre {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 85%;
+}
+
+.showcasePage {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.showcaseList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.showcaseRow {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 160px 160px;
+  gap: 8px;
+  align-items: start;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.showcaseRow.compact {
+  grid-template-columns: minmax(300px, 1fr) 180px auto;
+}
+
+.showcasePreviewGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.showcasePreview {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #e5e7eb;
+  border: 1px solid #e5e7eb;
+}
+
+.showcasePreview.empty {
+  display: grid;
+  place-items: center;
+  color: #6b7280;
+  font-size: 12px;
 }
 
 .chips {
@@ -349,6 +402,83 @@ pre {
   background: #0a84ff;
   color: #fff;
   border-color: #0a84ff;
+}
+
+.tabBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #ff5d7a;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.complaintsPanel h2 {
+  margin-top: 0;
+}
+
+.complaintsGrid {
+  display: grid;
+  gap: 16px;
+}
+
+.complaintCard {
+  display: grid;
+  grid-template-columns: 180px 1fr auto;
+  gap: 16px;
+  align-items: start;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.complaintCard img {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
+  border-radius: 12px;
+  background: #e2e8f0;
+}
+
+.complaintMeta {
+  display: grid;
+  gap: 8px;
+}
+
+.complaintTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.complaintTag {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  font-size: 12px;
+}
+
+.complaintActions {
+  display: grid;
+  gap: 10px;
+  min-width: 180px;
+}
+
+.complaintActions button {
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .complaintCard {
+    grid-template-columns: 1fr;
+  }
 }
 
 .notificationsPanel h2,

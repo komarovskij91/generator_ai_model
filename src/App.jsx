@@ -4,6 +4,8 @@ import FeedPostsTab from './FeedPostsTab'
 import VoiceCallDraftSection from './VoiceCallDraftSection'
 import { PaidMediaControls } from './PaidMediaControls'
 import { GeneratedPaidControls, setGeneratedPaidFlags } from './GeneratedPaidControls'
+import OnboardingShowcaseTab from './OnboardingShowcaseTab'
+import MagicPhotoComplaintsTab, { fetchComplaintsBadgeCount } from './MagicPhotoComplaintsTab'
 
 const createVoiceCallSessionId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -1053,6 +1055,7 @@ function App() {
   const [pushLog, setPushLog] = useState([])
   const [pushLoading, setPushLoading] = useState(false)
   const [pushSending, setPushSending] = useState(false)
+  const [complaintsBadgeCount, setComplaintsBadgeCount] = useState(0)
   const [prefillBrief, setPrefillBrief] = useState(() => readJsonStorage(FORM_DRAFT_KEY).prefillBrief || '')
   const [prefillImageUrl, setPrefillImageUrl] = useState(() => readJsonStorage(FORM_DRAFT_KEY).prefillImageUrl || '')
   const [prefillGender, setPrefillGender] = useState(() => readJsonStorage(FORM_DRAFT_KEY).prefillGender || 'female')
@@ -1232,6 +1235,28 @@ function App() {
     // Перезагрузка списка только при смене вкладки / авторизации; не привязываемся к телу loadPushCandidates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthed, mainTab])
+
+  useEffect(() => {
+    if (!isAuthed) {
+      setComplaintsBadgeCount(0)
+      return undefined
+    }
+    let cancelled = false
+    const refreshBadge = async () => {
+      try {
+        const count = await fetchComplaintsBadgeCount(adminFetch)
+        if (!cancelled) setComplaintsBadgeCount(count)
+      } catch {
+        if (!cancelled) setComplaintsBadgeCount(0)
+      }
+    }
+    refreshBadge()
+    const timer = setInterval(refreshBadge, 30000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [isAuthed, adminFetch])
 
   const reloadEditorModels = async () => {
     try {
@@ -2057,6 +2082,14 @@ function App() {
             </button>
             <button
               type="button"
+              className={mainTab === 'complaints' ? 'topTab active' : 'topTab'}
+              onClick={() => setMainTab('complaints')}
+            >
+              Жалобы
+              {complaintsBadgeCount > 0 && <span className="tabBadge">{complaintsBadgeCount}</span>}
+            </button>
+            <button
+              type="button"
               className={mainTab === 'editor' ? 'topTab active' : 'topTab'}
               onClick={() => setMainTab('editor')}
             >
@@ -2089,6 +2122,13 @@ function App() {
               onClick={() => setMainTab('banners')}
             >
               Банеры
+            </button>
+            <button
+              type="button"
+              className={mainTab === 'onboarding' ? 'topTab active' : 'topTab'}
+              onClick={() => setMainTab('onboarding')}
+            >
+              Онбординг
             </button>
             <button
               type="button"
@@ -2230,12 +2270,20 @@ function App() {
         </section>
       )}
 
+      {mainTab === 'complaints' && (
+        <MagicPhotoComplaintsTab
+          adminFetch={adminFetch}
+          isActive={mainTab === 'complaints'}
+          onCountChange={setComplaintsBadgeCount}
+        />
+      )}
       {mainTab === 'posts' && <FeedPostsTab adminFetch={adminFetch} isActive={mainTab === 'posts'} />}
       {mainTab === 'content' && <ContentModerationTab adminFetch={adminFetch} isActive={mainTab === 'content'} />}
       {mainTab === 'modelContentBank' && (
         <ModelContentBankTab adminFetch={adminFetch} isActive={mainTab === 'modelContentBank'} />
       )}
       {mainTab === 'banners' && <BannersTab adminFetch={adminFetch} isActive={mainTab === 'banners'} />}
+      {mainTab === 'onboarding' && <OnboardingShowcaseTab adminFetch={adminFetch} isActive={mainTab === 'onboarding'} />}
       {mainTab === 'settings' && <ContentSettingsTab adminFetch={adminFetch} isActive={mainTab === 'settings'} />}
 
       {mainTab === 'editor' && step === 'form' && (
