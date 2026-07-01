@@ -78,8 +78,9 @@ export default function MagicPhotoComplaintsTab({ adminFetch, isActive, onCountC
       const data = await response.json()
       const nextItems = Array.isArray(data.items) ? data.items : []
       setItems(nextItems)
-      setStatus(`${nextItems.length} открытых`)
-      await refreshBadge()
+      const resolvedCount = Number.isFinite(Number(data.count)) ? Number(data.count) : nextItems.length
+      setStatus(`${resolvedCount} открытых`)
+      onCountChange?.(resolvedCount)
     } catch (error) {
       setItems([])
       setStatus('Ошибка загрузки')
