@@ -423,6 +423,21 @@ pre {
   margin-top: 0;
 }
 
+.complaintActionLog {
+  margin: 12px 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.complaintActionLog pre.raw {
+  margin: 10px 0 0;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 12px;
+}
+
 .complaintsGrid {
   display: grid;
   gap: 16px;

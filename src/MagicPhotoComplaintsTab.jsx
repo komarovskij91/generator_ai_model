@@ -5,6 +5,19 @@ function formatDate(ts) {
   return new Date(ts * 1000).toLocaleString('ru-RU')
 }
 
+function formatPushSummary(data) {
+  const parts = []
+  parts.push(`Чат: ${data.chat_sent === false ? 'нет' : 'отправлено'}`)
+  if (!Array.isArray(data.push_details) || data.push_details.length === 0) {
+    parts.push('Push: нет устройств')
+    if (data.push_note) parts.push(data.push_note)
+    return parts.join(' · ')
+  }
+  parts.push(`Push: ok ${data.push_sent || 0}, fail ${data.push_failed || 0}`)
+  if (data.push_note) parts.push(data.push_note)
+  return parts.join(' · ')
+}
+
 function ComplaintCard({ item, busyId, onAction }) {
   const tags = Array.isArray(item.complaint_tags) ? item.complaint_tags : []
   const tokenCost = Number(item.token_cost || 0)
@@ -60,6 +73,7 @@ export default function MagicPhotoComplaintsTab({ adminFetch, isActive, onCountC
   const [items, setItems] = useState([])
   const [status, setStatus] = useState('')
   const [busyId, setBusyId] = useState('')
+  const [lastActionLog, setLastActionLog] = useState(null)
 
   const refreshBadge = useCallback(async () => {
     try {
@@ -85,7 +99,7 @@ export default function MagicPhotoComplaintsTab({ adminFetch, isActive, onCountC
       setItems([])
       setStatus('Ошибка загрузки')
     }
-  }, [adminFetch, refreshBadge])
+  }, [adminFetch, onCountChange])
 
   const handleAction = useCallback(
     async (generationId, action) => {
@@ -96,11 +110,19 @@ export default function MagicPhotoComplaintsTab({ adminFetch, isActive, onCountC
           { method: 'POST' }
         )
         const data = await response.json()
-        setStatus(
+        const tokenLine =
           action === 'approve'
-            ? `Возвращено ${data.credited_tokens || 0} tokens`
-            : `Компенсация ${data.credited_tokens || 0} tokens`
-        )
+            ? `Токены: возвращено ${data.credited_tokens || 0}`
+            : `Токены: компенсация ${data.credited_tokens || 0}`
+        setStatus(tokenLine)
+        setLastActionLog({
+          ts: new Date().toLocaleString('ru-RU'),
+          action,
+          generationId,
+          summary: formatPushSummary(data),
+          details: Array.isArray(data.push_details) ? data.push_details : [],
+          raw: data,
+        })
         await loadComplaints()
       } catch (error) {
         setStatus(error.message || 'Ошибка действия')
@@ -121,9 +143,19 @@ export default function MagicPhotoComplaintsTab({ adminFetch, isActive, onCountC
       <h2>Жалобы на Magic Photo</h2>
       <p className="fieldHint">
         Пользователь поставил дизлайк и оставил жалобу. «Вернуть» — полный возврат + 50% бонус. «Отменить
-        претензию» — подарок 50% от стоимости генерации.
+        претензию» — подарок 50% от стоимости генерации. Сообщение в чат отправляется всегда; push — напрямую
+        через APNs из back (не через noloo_notification).
       </p>
       <p className="status">{status}</p>
+      {lastActionLog ? (
+        <div className="complaintActionLog">
+          <strong>Последняя обработка ({lastActionLog.ts})</strong>
+          <div className="fieldHint">{lastActionLog.summary}</div>
+          {lastActionLog.details.length > 0 ? (
+            <pre className="raw">{JSON.stringify(lastActionLog.details, null, 2)}</pre>
+          ) : null}
+        </div>
+      ) : null}
       <div className="complaintsGrid">
         {items.length === 0 ? (
           <p className="fieldHint">Открытых жалоб пока нет.</p>
